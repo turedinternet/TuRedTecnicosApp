@@ -786,6 +786,9 @@ async function generateComprobante() {
     }
   };
 
+  // Guardar comprobante en local SIEMPRE primero (para visualización inmediata)
+  localStorage.setItem(`receipt_cache_${uuid}`, JSON.stringify(comprobante));
+
   // Guardar en la base de datos
   if (isMockMode) {
     // Modo Mock: Guardar en localStorage
@@ -794,17 +797,11 @@ async function generateComprobante() {
     localStorage.setItem('mock_comprobantes', JSON.stringify(savedReceipts));
     console.log('Comprobante mock guardado localmente:', comprobante);
   } else {
-    // Firebase real: el SDK maneja offline (IndexedDB) y sincroniza solo al reconectar
-    try {
-      await setDoc(doc(db, 'comprobantes', uuid), comprobante);
-      console.log('Comprobante enviado al SDK de Firestore:', uuid);
-    } catch (e) {
-      console.error('Error al guardar comprobante en Firestore:', e);
-    }
+    // Firebase real: enviar a Firestore (fire-and-forget, no bloquear la UI)
+    setDoc(doc(db, 'comprobantes', uuid), comprobante)
+      .then(() => console.log('Comprobante enviado a Firestore:', uuid))
+      .catch(e => console.error('Error al guardar comprobante en Firestore:', e));
   }
-
-  // Guardar comprobante temporal en local para visualización directa
-  localStorage.setItem(`receipt_cache_${uuid}`, JSON.stringify(comprobante));
 
   // Limpiar Carrito y Formulario del Panel
   resetPanelForm();
