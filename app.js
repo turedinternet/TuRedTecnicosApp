@@ -702,7 +702,7 @@ function updateCartTable() {
     }
 
     tr.innerHTML = `
-      <td><strong>${item.codigo}</strong><br>${item.nombre}${paymentBadge}</td>
+      <td><strong>${escapeHtml(item.codigo)}</strong><br>${escapeHtml(item.nombre)}${paymentBadge}</td>
       <td class="text-center">${item.cantidad}</td>
       <td class="text-right">${formatCurrency(item.precio_unitario)}</td>
       <td class="text-right">${formatCurrency(item.subtotal)}</td>
@@ -889,24 +889,24 @@ async function loadComprobanteView(id) {
   }
 
   // Emisor
-  document.getElementById('r-tech-name').textContent = comprobante.tecnico_nombre;
-  document.getElementById('r-tech-company').textContent = comprobante.tecnico_empresa;
+  document.getElementById('r-tech-name').textContent = escapeHtml(comprobante.tecnico_nombre);
+  document.getElementById('r-tech-company').textContent = escapeHtml(comprobante.tecnico_empresa);
 
   // Cliente
   const clientIdContainer = document.getElementById('r-client-id-container');
   if (comprobante.cliente.numero_cliente) {
-    document.getElementById('r-client-id').textContent = comprobante.cliente.numero_cliente;
+    document.getElementById('r-client-id').textContent = escapeHtml(comprobante.cliente.numero_cliente);
     clientIdContainer.style.display = 'block';
   } else {
     clientIdContainer.style.display = 'none';
   }
 
-  document.getElementById('r-client-name').textContent = comprobante.cliente.nombre;
-  document.getElementById('r-client-address').textContent = comprobante.cliente.direccion;
+  document.getElementById('r-client-name').textContent = escapeHtml(comprobante.cliente.nombre);
+  document.getElementById('r-client-address').textContent = escapeHtml(comprobante.cliente.direccion);
   
   const phoneContainer = document.getElementById('r-client-phone-container');
   if (comprobante.cliente.telefono) {
-    document.getElementById('r-client-phone').textContent = comprobante.cliente.telefono;
+    document.getElementById('r-client-phone').textContent = escapeHtml(comprobante.cliente.telefono);
     phoneContainer.style.display = 'block';
   } else {
     phoneContainer.style.display = 'none';
@@ -914,7 +914,7 @@ async function loadComprobanteView(id) {
 
   const emailContainer = document.getElementById('r-client-email-container');
   if (comprobante.cliente.email) {
-    document.getElementById('r-client-email').textContent = comprobante.cliente.email;
+    document.getElementById('r-client-email').textContent = escapeHtml(comprobante.cliente.email);
     emailContainer.style.display = 'block';
   } else {
     emailContainer.style.display = 'none';
@@ -945,8 +945,8 @@ async function loadComprobanteView(id) {
     }
 
     tr.innerHTML = `
-      <td>${item.codigo}</td>
-      <td><strong>${item.nombre}</strong>${paymentInfo}</td>
+      <td>${escapeHtml(item.codigo)}</td>
+      <td><strong>${escapeHtml(item.nombre)}</strong>${paymentInfo}</td>
       <td class="text-center">${item.cantidad}</td>
       <td class="text-right">${formatCurrency(item.precio_unitario)}</td>
       <td class="text-right">${formatCurrency(item.subtotal)}</td>
@@ -1175,14 +1175,14 @@ async function loadHistorialComprobantes() {
     }
 
     tr.innerHTML = `
-      <td><strong>${c.comprobante_id.toUpperCase()}</strong></td>
-      <td>${c.cliente.nombre}<br><small style="color: var(--text-secondary)">${c.cliente.direccion}</small></td>
+      <td><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
+      <td>${escapeHtml(c.cliente.nombre)}<br><small style="color: var(--text-secondary)">${escapeHtml(c.cliente.direccion)}</small></td>
       <td>${formatDate(c.fecha_creacion)}</td>
       <td class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
       <td class="text-center">${badgeHtml}</td>
       <td class="text-center">
         <div class="history-actions">
-          <a href="#/comprobante/${c.comprobante_id}" class="btn-view-receipt">
+          <a href="#/comprobante/${escapeHtml(c.comprobante_id)}" class="btn-view-receipt">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             Ver
           </a>
@@ -1195,7 +1195,13 @@ async function loadHistorialComprobantes() {
 
 }
 
-// --- UTILERÍAS ---
+// --- UTILIDADES ---
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return String(str).replace(/[&<>"']/g, c => map[c]);
+}
 
 function formatCurrency(amount) {
   return new Intl.NumberFormat('es-AR', {
@@ -1326,13 +1332,6 @@ function setupInstallModalEvents() {
 // FUNCIONES DEL PANEL DE ADMINISTRADOR
 // ==========================================================================
 
-// Guardar credenciales del admin para re-login después de crear usuarios
-let adminCredentials = null;
-
-function saveAdminCredentials(email, password) {
-  adminCredentials = { email, password };
-}
-
 // --- MODAL: CREAR / EDITAR TÉCNICO ---
 function openTechModal(techData = null) {
   const modal = document.getElementById('modal-tech');
@@ -1407,16 +1406,7 @@ async function handleTechSubmit(e) {
       successEl.classList.remove('hidden');
     } else {
       // --- CREACIÓN ---
-      // Guardar credenciales del admin para re-login
-      if (!adminCredentials && currentUser) {
-        const pw = prompt('Para crear un nuevo técnico, necesitamos re-autenticarte. Ingresá tu contraseña:');
-        if (!pw) {
-          spinner.classList.add('hidden');
-          btnText.classList.remove('hidden');
-          return;
-        }
-        adminCredentials = { email: currentUser.email, password: pw };
-      }
+      const savedAdminEmail = currentUser.email;
 
       // Crear usuario en Firebase Auth (esto lo loguea como el nuevo usuario)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -1435,9 +1425,20 @@ async function handleTechSubmit(e) {
       // Cerrar sesión del nuevo usuario
       await signOut(auth);
 
-      // Re-login del admin
-      if (adminCredentials) {
-        await signInWithEmailAndPassword(auth, adminCredentials.email, adminCredentials.password);
+      // Re-login del admin: pedir contraseña al admin antes de cerrar sesión
+      // Usamos una referencia temporal guardada antes del signOut
+      const adminPassword = prompt('Ingresá tu contraseña de admin para volver a iniciar sesión:');
+      if (adminPassword) {
+        try {
+          await signInWithEmailAndPassword(auth, savedAdminEmail, adminPassword);
+        } catch (e) {
+          console.warn('No se pudo re-loguear al admin automáticamente.');
+          window.location.hash = '#/login';
+          return;
+        }
+      } else {
+        window.location.hash = '#/login';
+        return;
       }
 
       successEl.textContent = `Técnico "${name}" creado correctamente.`;
@@ -1457,8 +1458,7 @@ async function handleTechSubmit(e) {
     else if (error.code === 'auth/invalid-email') errMsg = 'El correo electrónico no es válido.';
     else if (error.code === 'auth/operation-not-allowed') errMsg = 'El registro por email/contraseña no está habilitado en Firebase Console.';
     else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-      errMsg = 'Tu contraseña de admin es incorrecta. No se pudo re-autenticar.';
-      adminCredentials = null;
+      errMsg = 'La contraseña de admin es incorrecta.';
     }
     errorEl.textContent = errMsg;
     errorEl.classList.remove('hidden');
@@ -1507,21 +1507,21 @@ async function loadAdminTechs() {
       const count = compCounts[tech.uid] || 0;
 
       tr.innerHTML = `
-        <td><strong>${tech.nombre || 'Sin nombre'}</strong>${isCurrentUser ? ' <small style="color:var(--accent-primary)">(Tú)</small>' : ''}</td>
-        <td>${tech.email || '--'}</td>
-        <td>${tech.empresa || 'TuRed'}</td>
+        <td><strong>${escapeHtml(tech.nombre) || 'Sin nombre'}</strong>${isCurrentUser ? ' <small style="color:var(--accent-primary)">(Tú)</small>' : ''}</td>
+        <td>${escapeHtml(tech.email) || '--'}</td>
+        <td>${escapeHtml(tech.empresa) || 'TuRed'}</td>
         <td>${rolBadge}</td>
         <td class="text-center">${count}</td>
         <td class="text-center">
           <div class="history-actions">
-            <button class="btn-icon-action btn-edit-tech" data-uid="${tech.uid}" data-nombre="${tech.nombre || ''}" data-empresa="${tech.empresa || ''}" data-email="${tech.email || ''}" title="Editar">
+            <button class="btn-icon-action btn-edit-tech" data-uid="${escapeHtml(tech.uid)}" data-nombre="${escapeHtml(tech.nombre || '')}" data-empresa="${escapeHtml(tech.empresa || '')}" data-email="${escapeHtml(tech.email || '')}" title="Editar">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
             </button>
-            <button class="btn-icon-action btn-change-password" data-uid="${tech.uid}" data-email="${tech.email || ''}" title="Cambiar Contraseña">
+            <button class="btn-icon-action btn-change-password" data-uid="${escapeHtml(tech.uid)}" data-email="${escapeHtml(tech.email || '')}" title="Cambiar Contraseña">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </button>
             ${!isCurrentUser && tech.rol !== 'admin' ? `
-            <button class="btn-icon-action btn-delete-tech" data-uid="${tech.uid}" data-nombre="${tech.nombre || ''}" title="Eliminar">
+            <button class="btn-icon-action btn-delete-tech" data-uid="${escapeHtml(tech.uid)}" data-nombre="${escapeHtml(tech.nombre || '')}" title="Eliminar">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>` : ''}
           </div>
@@ -1625,28 +1625,18 @@ async function handlePasswordChange(e) {
   spinner.classList.remove('hidden');
 
   try {
-    // Re-autenticar al admin
+    if (targetUid !== currentUser.uid) {
+      spinner.classList.add('hidden');
+      errorEl.textContent = 'Por seguridad, solo podés cambiar tu propia contraseña desde la app. Para cambiar la contraseña de otro usuario, usá Firebase Console.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     const credential = EmailAuthProvider.credential(currentUser.email, adminPw);
     await reauthenticateWithCredential(currentUser, credential);
 
-    // No podemos actualizar la contraseña de OTRO usuario desde el client SDK
-    // Pero SÍ podemos actualizar la del admin mismo.
-    // Para otros usuarios, guardamos una bandera y lo hacemos al loguearse.
-    // Solución alternativa: usar Firestore para forzar cambio en el próximo login.
-    
-    if (targetUid === currentUser.uid) {
-      // Cambiando la contraseña del admin mismo
-      await firebaseUpdatePassword(currentUser, newPw);
-      successEl.textContent = 'Tu contraseña fue actualizada correctamente.';
-    } else {
-      // Para otros usuarios: guardar hash temporal en Firestore
-      await setDoc(doc(db, 'usuarios', targetUid), {
-        password_reset_pending: true,
-        new_password_hash: newPw
-      }, { merge: true });
-      successEl.textContent = `Se guardó la nueva contraseña para ${targetEmail}. Se aplicará en el próximo login.`;
-    }
-
+    await firebaseUpdatePassword(currentUser, newPw);
+    successEl.textContent = 'Tu contraseña fue actualizada correctamente.';
     successEl.classList.remove('hidden');
     setTimeout(() => {
       document.getElementById('modal-password').classList.add('hidden');
@@ -1720,7 +1710,7 @@ async function loadAllComprobantes() {
       techFilter.innerHTML = '<option value="">Todos los técnicos</option>';
       uniqueTechs.forEach(uid => {
         const name = techNames[uid] || uid;
-        techFilter.innerHTML += `<option value="${uid}">${name}</option>`;
+        techFilter.innerHTML += `<option value="${escapeHtml(uid)}">${escapeHtml(name)}</option>`;
       });
       techFilter.value = selectedVal;
     }
@@ -1761,19 +1751,19 @@ function renderAdminComprobantes() {
       : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
 
     tr.innerHTML = `
-      <td><strong>${c.comprobante_id.toUpperCase()}</strong></td>
-      <td>${c._techName}</td>
-      <td>${c.cliente?.nombre || '--'}</td>
+      <td><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
+      <td>${escapeHtml(c._techName)}</td>
+      <td>${escapeHtml(c.cliente?.nombre) || '--'}</td>
       <td>${formatDate(c.fecha_creacion)}</td>
       <td class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
       <td class="text-center">${badgeHtml}</td>
       <td class="text-center">
         <div class="history-actions">
-          <a href="#/comprobante/${c.comprobante_id}" class="btn-view-receipt">
+          <a href="#/comprobante/${escapeHtml(c.comprobante_id)}" class="btn-view-receipt">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             Ver
           </a>
-          <button class="btn-delete-receipt btn-admin-delete-comp" data-id="${c.comprobante_id}" title="Eliminar">
+          <button class="btn-delete-receipt btn-admin-delete-comp" data-id="${escapeHtml(c.comprobante_id)}" title="Eliminar">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           </button>
         </div>
