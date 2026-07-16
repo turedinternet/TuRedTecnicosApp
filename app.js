@@ -704,16 +704,16 @@ async function generateComprobante() {
     savedReceipts.push(comprobante);
     localStorage.setItem('mock_comprobantes', JSON.stringify(savedReceipts));
     console.log('Comprobante mock guardado localmente:', comprobante);
-  } else {
-    // Firestore SDK persistencia offline (se guarda localmente en IndexedDB de forma automática)
+  } else if (navigator.onLine) {
+    // Firestore SDK: solo intentar si hay conexión para evitar que se cuelgue
     try {
-      // Usar comprobante_id como nombre del documento
       await setDoc(doc(db, 'comprobantes', uuid), comprobante);
       console.log('Comprobante enviado al SDK de Firestore:', uuid);
     } catch (e) {
       console.error('Error al guardar comprobante en Firestore:', e);
-      // El SDK intentará subirlo de nuevo si la persistencia falló a nivel de app
     }
+  } else {
+    console.log('Offline: comprobante guardado solo en cache local. Se sincronizará al reconectar.');
   }
 
   // Guardar comprobante temporal en local para visualización directa
@@ -746,19 +746,21 @@ async function loadComprobanteView(id) {
     const savedReceipts = JSON.parse(localStorage.getItem('mock_comprobantes') || '[]');
     comprobante = savedReceipts.find(r => r.comprobante_id === id);
   } else {
-    // Firebase real: intentar Firestore primero para obtener el estado más reciente
-    try {
-      const docRef = await getDoc(doc(db, 'comprobantes', id));
-      if (docRef.exists()) {
-        comprobante = docRef.data();
-        // Actualizar cache local con el estado actual de Firestore
-        localStorage.setItem(`receipt_cache_${id}`, JSON.stringify(comprobante));
+    // Firebase real: intentar Firestore SOLO si hay conexión
+    if (navigator.onLine) {
+      try {
+        const docRef = await getDoc(doc(db, 'comprobantes', id));
+        if (docRef.exists()) {
+          comprobante = docRef.data();
+          // Actualizar cache local con el estado actual de Firestore
+          localStorage.setItem(`receipt_cache_${id}`, JSON.stringify(comprobante));
+        }
+      } catch (e) {
+        console.warn('Firestore no disponible, usando cache local:', e);
       }
-    } catch (e) {
-      console.warn('Firestore no disponible, usando cache local:', e);
     }
 
-    // Si Firestore no devolvió nada, caer al cache local
+    // Si Firestore no devolvió nada o estamos offline, caer al cache local
     if (!comprobante) {
       const cached = localStorage.getItem(`receipt_cache_${id}`);
       if (cached) {
@@ -931,20 +933,46 @@ async function syncOfflineComprobantes() {
       loadComprobanteView(id);
     }
   } else {
-    // Firebase real: Firestore ya sincronizó en background, actualizar caches locales
-    console.log('[Sync] Firebase Firestore se encuentra en línea. Actualizando caches locales...');
+    // Firebase real: enviar comprobantes pendientes locales a Firestore y actualizar caches
+    console.log('[Sync] Firebase real: sincronizando comprobantes pendientes...');
     try {
-      if (!currentUser) return;
-      const q = query(collection(db, 'comprobantes'), where('tecnico_uid', '==', currentUser.uid));
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        // Actualizar cache individual del comprobante
-        localStorage.setItem(`receipt_cache_${data.comprobante_id}`, JSON.stringify(data));
-      });
-      console.log('[Sync] Caches locales actualizados desde Firestore.');
+      // 1. Buscar comprobantes pendientes en localStorage y enviarlos a Firestore
+      const keys = Object.keys(localStorage);
+      const pendingKeys = keys.filter(k => k.startsWith('receipt_cache_'));
+      let syncedCount = 0;
 
-      // Si estamos en la vista de comprobante actual, recargar para reflejar estado
+      for (const key of pendingKeys) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key));
+          if (data && data.estado === 'pendiente_sincronizacion') {
+            await setDoc(doc(db, 'comprobantes', data.comprobante_id), data);
+            data.estado = 'sincronizado';
+            data.fecha_sincronizacion = new Date().toISOString();
+            localStorage.setItem(key, JSON.stringify(data));
+            syncedCount++;
+          }
+        } catch (err) {
+          console.error(`[Sync] Error enviando comprobante ${key}:`, err);
+        }
+      }
+
+      if (syncedCount > 0) {
+        console.log(`[Sync] ${syncedCount} comprobantes enviados a Firestore.`);
+      }
+
+      // 2. Refrescar desde Firestore para obtener cualquier dato actualizado del servidor
+      if (currentUser) {
+        const q = query(collection(db, 'comprobantes'), where('tecnico_uid', '==', currentUser.uid));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          localStorage.setItem(`receipt_cache_${data.comprobante_id}`, JSON.stringify(data));
+        });
+      }
+
+      console.log('[Sync] Sincronización completada.');
+
+      // 3. Si estamos en la vista de comprobante actual, recargar para reflejar estado
       const hash = window.location.hash;
       if (hash.startsWith('#/comprobante/')) {
         const parts = hash.split('/');
@@ -952,7 +980,7 @@ async function syncOfflineComprobantes() {
         loadComprobanteView(id);
       }
     } catch (e) {
-      console.error('[Sync] Error actualizando caches locales:', e);
+      console.error('[Sync] Error en sincronización:', e);
     }
   }
 }
