@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+
+# Temp
+.tmp/
+
+# Markdown (documentación interna)
+*.md
+!README.md
+config.json
+
+# Images (internas)
+*.png
+!icon-192.png
+!icon-512.png
+!Logo TuRed completo.png
+
+# Source files
+*.txt
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

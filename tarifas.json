@@ -1,0 +1,88 @@
+[
+  {
+    "id": "inst_general",
+    "codigo": "INST-001",
+    "nombre": "Instalación General",
+    "categoria": "Servicios",
+    "precio": 45000,
+    "unidad": "servicio"
+  },
+  {
+    "id": "inst_referido",
+    "codigo": "INST-002",
+    "nombre": "Instalación Referido",
+    "categoria": "Servicios",
+    "precio": 33750,
+    "unidad": "servicio"
+  },
+  {
+    "id": "serv_mudanza",
+    "codigo": "SRV-003",
+    "nombre": "Mudanza",
+    "categoria": "Servicios",
+    "precio": 10000,
+    "unidad": "servicio"
+  },
+  {
+    "id": "serv_reconexion",
+    "codigo": "SRV-004",
+    "nombre": "Reconexión",
+    "categoria": "Servicios",
+    "precio": 10000,
+    "unidad": "servicio"
+  },
+  {
+    "id": "serv_tecnico",
+    "codigo": "SRV-005",
+    "nombre": "Servicio Técnico",
+    "categoria": "Servicios",
+    "precio": 8000,
+    "unidad": "servicio"
+  },
+  {
+    "id": "mat_router",
+    "codigo": "MAT-001",
+    "nombre": "Compra de Router",
+    "categoria": "Materiales",
+    "precio": 45000,
+    "unidad": "unidad",
+    "cuotas": [
+      { "cantidad": 2, "monto": 22500 }
+    ]
+  },
+  {
+    "id": "mat_tvbox",
+    "codigo": "MAT-002",
+    "nombre": "Compra de TvBox",
+    "categoria": "Materiales",
+    "precio": 50000,
+    "unidad": "unidad",
+    "cuotas": [
+      { "cantidad": 3, "monto": 22000 }
+    ]
+  },
+  {
+    "id": "mat_transformador",
+    "codigo": "MAT-003",
+    "nombre": "Transformador de Router o TvBox",
+    "categoria": "Materiales",
+    "precio": 10000,
+    "unidad": "unidad"
+  },
+  {
+    "id": "mat_control",
+    "codigo": "MAT-004",
+    "nombre": "Control Remoto de TvBox",
+    "categoria": "Materiales",
+    "precio": 10000,
+    "unidad": "unidad"
+  },
+  {
+    "id": "mat_cable",
+    "codigo": "MAT-005",
+    "nombre": "Metro de Cable",
+    "categoria": "Materiales",
+    "precio": 500,
+    "unidad": "metro"
+  }
+]
