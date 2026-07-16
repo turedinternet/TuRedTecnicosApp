@@ -246,8 +246,9 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(0, 124, 195, 0.25);
 }
 
-/* Fix: Asegura que las opciones del selector tengan fondo oscuro y letra clara al desplegarse */
-select option {
+/* Fix: Asegura que las opciones del selector y las cabeceras de los grupos tengan fondo oscuro y letra clara */
+select option,
+select optgroup {
   background-color: var(--bg-secondary); /* Usa el fondo oscuro de TuRed (#37302d) */
   color: var(--text-primary);            /* Mantiene la letra clara (#f3f4f6) */
 }
