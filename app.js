@@ -568,12 +568,16 @@ function addItemToCart() {
       cantidad: quantity,
       precio_unitario: item.precio,
       subtotal: quantity * item.precio,
-      metodo_pago: selectedPaymentMethod
+      metodo_pago: selectedPaymentMethod,
+      precio_contado: item.precio
     };
 
-    // Si eligió cuotas, guardar info de cuotas
+    // Si eligió cuotas, el precio que se cobra ahora es la cuota
     if (selectedPaymentMethod === 'cuotas' && item.cuotas && item.cuotas.length > 0) {
-      cartItem.cuotas_info = item.cuotas[0];
+      const c = item.cuotas[0];
+      cartItem.cuotas_info = c;
+      cartItem.precio_unitario = c.monto;
+      cartItem.subtotal = quantity * c.monto;
     }
 
     cartItems.push(cartItem);
@@ -610,7 +614,8 @@ function updateCartTable() {
     // Badge de método de pago
     let paymentBadge = '';
     if (item.metodo_pago === 'cuotas' && item.cuotas_info) {
-      paymentBadge = `<span class="payment-method-badge badge-cuotas">${item.cuotas_info.cantidad} cuotas</span>`;
+      const totalCuotas = item.cuotas_info.cantidad * item.cuotas_info.monto;
+      paymentBadge = `<span class="payment-method-badge badge-cuotas">1/${item.cuotas_info.cantidad} cuotas — Pendiente: ${formatCurrency(totalCuotas - item.cuotas_info.monto)}</span>`;
     } else {
       paymentBadge = `<span class="payment-method-badge badge-contado">Contado</span>`;
     }
@@ -857,7 +862,10 @@ async function loadComprobanteView(id) {
     // Info de método de pago
     let paymentInfo = '';
     if (item.metodo_pago === 'cuotas' && item.cuotas_info) {
-      paymentInfo = `<br><small style="color: #d97706; font-weight: 500;">${item.cuotas_info.cantidad} cuotas de ${formatCurrency(item.cuotas_info.monto)}</small>`;
+      const c = item.cuotas_info;
+      const totalCuotas = c.cantidad * c.monto;
+      const pendiente = totalCuotas - c.monto;
+      paymentInfo = `<br><small style="color: #d97706; font-weight: 500;">1/${c.cantidad} cuotas de ${formatCurrency(c.monto)} — Pendiente: ${formatCurrency(pendiente)}</small>`;
     }
 
     tr.innerHTML = `
@@ -886,8 +894,8 @@ function generateQRCode(url) {
   qrContainer.innerHTML = ''; // Limpiar previo
 
   try {
-    // Parámetros: Tipo de QR (1-40, 4 es ideal para urls de tamaño medio), Nivel corrección error ('L','M','Q','H')
-    const typeNumber = 4;
+    // typeNumber 0 = auto-detect del tamaño necesario
+    const typeNumber = 0;
     const errorCorrectionLevel = 'L';
     const qr = qrcode(typeNumber, errorCorrectionLevel);
     qr.addData(url);
