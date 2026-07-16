@@ -21,7 +21,6 @@ import {
   deleteDoc,
   getDoc, 
   getDocs, 
-  enableIndexedDbPersistence,
   query,
   where
 } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
@@ -96,15 +95,6 @@ function initFirebaseOrMock() {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-
-    // Habilitar persistencia offline en Firestore
-    enableIndexedDbPersistence(db).catch((err) => {
-      if (err.code == 'failed-precondition') {
-        console.warn('La persistencia falló: Múltiples pestañas abiertas.');
-      } else if (err.code == 'unimplemented') {
-        console.warn('El navegador no soporta persistencia de datos offline.');
-      }
-    });
 
     console.log('Firebase inicializado correctamente.');
   } catch (error) {
@@ -788,15 +778,8 @@ async function loadComprobanteView(id) {
     return;
   }
 
-  // Controlar visibilidad de botones del técnico
-  // Si no hay técnico logueado o es un cliente escaneando el QR, ocultamos los botones de acción del técnico
-  const sessionActive = isMockMode ? !!localStorage.getItem('mock_session') : !!auth.currentUser;
-  
-  if (sessionActive) {
-    actionBar.classList.remove('hidden');
-  } else {
-    actionBar.classList.add('hidden');
-  }
+  // Mostrar siempre la barra de acciones (imprimir / volver) al ver un comprobante
+  actionBar.classList.remove('hidden');
 
   // Rellenar datos en la factura A4
   document.getElementById('r-id').textContent = comprobante.comprobante_id.toUpperCase();
