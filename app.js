@@ -793,16 +793,14 @@ async function generateComprobante() {
     savedReceipts.push(comprobante);
     localStorage.setItem('mock_comprobantes', JSON.stringify(savedReceipts));
     console.log('Comprobante mock guardado localmente:', comprobante);
-  } else if (navigator.onLine) {
-    // Firestore SDK: solo intentar si hay conexión para evitar que se cuelgue
+  } else {
+    // Firebase real: el SDK maneja offline (IndexedDB) y sincroniza solo al reconectar
     try {
       await setDoc(doc(db, 'comprobantes', uuid), comprobante);
       console.log('Comprobante enviado al SDK de Firestore:', uuid);
     } catch (e) {
       console.error('Error al guardar comprobante en Firestore:', e);
     }
-  } else {
-    console.log('Offline: comprobante guardado solo en cache local. Se sincronizará al reconectar.');
   }
 
   // Guardar comprobante temporal en local para visualización directa
@@ -1034,9 +1032,10 @@ async function syncOfflineComprobantes() {
         try {
           const data = JSON.parse(localStorage.getItem(key));
           if (data && data.estado === 'pendiente_sincronizacion') {
-            await setDoc(doc(db, 'comprobantes', data.comprobante_id), data);
+            // Actualizar estado ANTES de enviar a Firestore
             data.estado = 'sincronizado';
             data.fecha_sincronizacion = new Date().toISOString();
+            await setDoc(doc(db, 'comprobantes', data.comprobante_id), data);
             localStorage.setItem(key, JSON.stringify(data));
             syncedCount++;
           }
