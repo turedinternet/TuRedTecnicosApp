@@ -10,8 +10,12 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.0/fireba
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
   signOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  updatePassword as firebaseUpdatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js';
 import { 
   getFirestore, 
@@ -31,6 +35,7 @@ let auth = null;
 let currentUser = null;
 let currentTechData = { nombre: 'Técnico de Campo', empresa: 'TuRed', email: '' };
 let isMockMode = false;
+let isAdmin = false;
 let tarifario = [];
 let cartItems = [];
 let selectedPaymentMethod = 'contado'; // 'contado' o 'cuotas'
@@ -153,6 +158,16 @@ function initRouter() {
       const id = parts[parts.length - 1];
       showView('view-comprobante');
       loadComprobanteView(id);
+    } else if (hash === '#/admin') {
+      checkLoginState(false, () => {
+        if (!isAdmin) {
+          window.location.hash = '#/panel';
+          return;
+        }
+        showView('view-admin');
+        loadAdminTechs();
+        loadAllComprobantes();
+      });
     } else {
       // Redirección por defecto
       window.location.hash = '#/panel';
@@ -196,6 +211,7 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       currentUser = user;
+      isAdmin = false;
       
       // Intentar recuperar los datos del técnico desde la colección usuarios de Firestore
       try {
@@ -207,6 +223,7 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
             empresa: data.empresa || 'TuRed',
             email: user.email
           };
+          isAdmin = data.rol === 'admin';
         } else {
           currentTechData = { nombre: 'Técnico de Campo', empresa: 'TuRed', email: user.email };
         }
@@ -216,6 +233,7 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
       }
       
       updateTechProfileUI();
+      updateAdminButton();
       if (isOnLoginRoute) {
         window.location.hash = '#/panel';
       } else if (onAuthSuccessCallback) {
@@ -223,6 +241,8 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
       }
     } else {
       currentUser = null;
+      isAdmin = false;
+      updateAdminButton();
       if (!isOnLoginRoute) {
         window.location.hash = '#/login';
       }
@@ -237,6 +257,13 @@ function updateTechProfileUI() {
   // Rellenar avatares e iniciales
   const initials = currentTechData.nombre.charAt(0).toUpperCase();
   document.querySelectorAll('.avatar').forEach(avatar => avatar.textContent = initials);
+}
+
+function updateAdminButton() {
+  const adminBtn = document.getElementById('btn-admin');
+  if (adminBtn) {
+    adminBtn.classList.toggle('hidden', !isAdmin);
+  }
 }
 
 // --- 3. LÓGICA DE NEGOCIO Y OPERACIÓN (Fase A/S - Architect & Stylize) ---
@@ -368,6 +395,68 @@ function setupEventListeners() {
   
   clientName.addEventListener('input', validateForm);
   clientAddress.addEventListener('input', validateForm);
+
+  // --- ADMIN: Pestañas ---
+  const tabAdminTechs = document.getElementById('tab-admin-techs');
+  const tabAdminComps = document.getElementById('tab-admin-comps');
+  if (tabAdminTechs && tabAdminComps) {
+    tabAdminTechs.addEventListener('click', () => {
+      tabAdminTechs.classList.add('active');
+      tabAdminComps.classList.remove('active');
+      document.getElementById('admin-techs-container').classList.remove('hidden');
+      document.getElementById('admin-comps-container').classList.add('hidden');
+    });
+    tabAdminComps.addEventListener('click', () => {
+      tabAdminComps.classList.add('active');
+      tabAdminTechs.classList.remove('active');
+      document.getElementById('admin-comps-container').classList.remove('hidden');
+      document.getElementById('admin-techs-container').classList.add('hidden');
+    });
+  }
+
+  // --- ADMIN: Crear Técnico ---
+  const btnCreateTech = document.getElementById('btn-create-tech');
+  if (btnCreateTech) {
+    btnCreateTech.addEventListener('click', () => openTechModal());
+  }
+
+  // --- ADMIN: Modal Técnico ---
+  const modalTech = document.getElementById('modal-tech');
+  const formTech = document.getElementById('form-tech');
+  const modalTechClose = document.getElementById('modal-tech-close');
+  const modalTechCancel = document.getElementById('modal-tech-cancel');
+
+  if (formTech) {
+    formTech.addEventListener('submit', handleTechSubmit);
+  }
+  if (modalTechClose) modalTechClose.addEventListener('click', () => modalTech.classList.add('hidden'));
+  if (modalTechCancel) modalTechCancel.addEventListener('click', () => modalTech.classList.add('hidden'));
+
+  // --- ADMIN: Modal Contraseña ---
+  const modalPassword = document.getElementById('modal-password');
+  const formPassword = document.getElementById('form-password');
+  const modalPasswordClose = document.getElementById('modal-password-close');
+  const modalPasswordCancel = document.getElementById('modal-password-cancel');
+
+  if (formPassword) {
+    formPassword.addEventListener('submit', handlePasswordChange);
+  }
+  if (modalPasswordClose) modalPasswordClose.addEventListener('click', () => modalPassword.classList.add('hidden'));
+  if (modalPasswordCancel) modalPasswordCancel.addEventListener('click', () => modalPassword.classList.add('hidden'));
+
+  // --- ADMIN: Modal Confirmación ---
+  const modalConfirmClose = document.getElementById('modal-confirm-close');
+  const modalConfirmCancel = document.getElementById('modal-confirm-cancel');
+  if (modalConfirmClose) modalConfirmClose.addEventListener('click', () => document.getElementById('modal-confirm').classList.add('hidden'));
+  if (modalConfirmCancel) modalConfirmCancel.addEventListener('click', () => document.getElementById('modal-confirm').classList.add('hidden'));
+
+  // --- ADMIN: Filtros de comprobantes ---
+  const adminFilterTech = document.getElementById('admin-filter-tech');
+  const adminFilterStatus = document.getElementById('admin-filter-status');
+  const btnRefreshAdminComps = document.getElementById('btn-refresh-admin-comps');
+  if (adminFilterTech) adminFilterTech.addEventListener('change', loadAllComprobantes);
+  if (adminFilterStatus) adminFilterStatus.addEventListener('change', loadAllComprobantes);
+  if (btnRefreshAdminComps) btnRefreshAdminComps.addEventListener('click', loadAllComprobantes);
 }
 
 // Handler de Inicio de Sesión
@@ -1171,4 +1260,487 @@ function getPlatform() {
   if (/android/i.test(userAgent)) return 'android';
   if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) return 'ios';
   return 'web';
+}
+
+// ==========================================================================
+// FUNCIONES DEL PANEL DE ADMINISTRADOR
+// ==========================================================================
+
+// Guardar credenciales del admin para re-login después de crear usuarios
+let adminCredentials = null;
+
+function saveAdminCredentials(email, password) {
+  adminCredentials = { email, password };
+}
+
+// --- MODAL: CREAR / EDITAR TÉCNICO ---
+function openTechModal(techData = null) {
+  const modal = document.getElementById('modal-tech');
+  const title = document.getElementById('modal-tech-title');
+  const form = document.getElementById('form-tech');
+  const errorEl = document.getElementById('modal-tech-error');
+  const successEl = document.getElementById('modal-tech-success');
+  const passwordGroup = document.getElementById('tech-password-group');
+
+  form.reset();
+  errorEl.classList.add('hidden');
+  successEl.classList.add('hidden');
+
+  if (techData) {
+    // Modo edición
+    title.textContent = 'Editar Técnico';
+    document.getElementById('tech-edit-uid').value = techData.uid;
+    document.getElementById('tech-name').value = techData.nombre || '';
+    document.getElementById('tech-company').value = techData.empresa || 'TuRed';
+    document.getElementById('tech-email').value = techData.email || '';
+    document.getElementById('modal-tech-submit-text').textContent = 'Guardar Cambios';
+    passwordGroup.classList.add('hidden');
+    document.getElementById('tech-password').removeAttribute('required');
+  } else {
+    // Modo creación
+    title.textContent = 'Crear Técnico';
+    document.getElementById('tech-edit-uid').value = '';
+    document.getElementById('modal-tech-submit-text').textContent = 'Crear Técnico';
+    passwordGroup.classList.remove('hidden');
+    document.getElementById('tech-password').setAttribute('required', '');
+  }
+
+  modal.classList.remove('hidden');
+}
+
+async function handleTechSubmit(e) {
+  e.preventDefault();
+  const editUid = document.getElementById('tech-edit-uid').value;
+  const name = document.getElementById('tech-name').value.trim();
+  const company = document.getElementById('tech-company').value.trim() || 'TuRed';
+  const email = document.getElementById('tech-email').value.trim();
+  const password = document.getElementById('tech-password').value;
+  const errorEl = document.getElementById('modal-tech-error');
+  const successEl = document.getElementById('modal-tech-success');
+  const spinner = document.getElementById('modal-tech-spinner');
+  const btnText = document.getElementById('modal-tech-submit-text');
+
+  errorEl.classList.add('hidden');
+  successEl.classList.add('hidden');
+
+  if (!name || !email) {
+    errorEl.textContent = 'Nombre y email son obligatorios.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  if (isMockMode) {
+    errorEl.textContent = 'La gestión de técnicos requiere Firebase real (no modo Demo).';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  spinner.classList.remove('hidden');
+  btnText.classList.add('hidden');
+
+  try {
+    if (editUid) {
+      // --- EDICIÓN ---
+      const userRef = doc(db, 'usuarios', editUid);
+      await setDoc(userRef, { nombre: name, empresa: company, email }, { merge: true });
+      successEl.textContent = 'Técnico actualizado correctamente.';
+      successEl.classList.remove('hidden');
+    } else {
+      // --- CREACIÓN ---
+      // Guardar credenciales del admin para re-login
+      if (!adminCredentials && currentUser) {
+        const pw = prompt('Para crear un nuevo técnico, necesitamos re-autenticarte. Ingresá tu contraseña:');
+        if (!pw) {
+          spinner.classList.add('hidden');
+          btnText.classList.remove('hidden');
+          return;
+        }
+        adminCredentials = { email: currentUser.email, password: pw };
+      }
+
+      // Crear usuario en Firebase Auth (esto lo loguea como el nuevo usuario)
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const newUid = userCredential.user.uid;
+
+      // Guardar datos del técnico en Firestore
+      await setDoc(doc(db, 'usuarios', newUid), {
+        nombre: name,
+        empresa: company,
+        email: email,
+        rol: 'tecnico',
+        activo: true,
+        fecha_registro: new Date().toISOString()
+      });
+
+      // Cerrar sesión del nuevo usuario
+      await signOut(auth);
+
+      // Re-login del admin
+      if (adminCredentials) {
+        await signInWithEmailAndPassword(auth, adminCredentials.email, adminCredentials.password);
+      }
+
+      successEl.textContent = `Técnico "${name}" creado correctamente.`;
+      successEl.classList.remove('hidden');
+      loadAdminTechs();
+    }
+
+    setTimeout(() => {
+      document.getElementById('modal-tech').classList.add('hidden');
+    }, 1500);
+
+  } catch (error) {
+    console.error('Error en operación de técnico:', error);
+    let errMsg = 'Error al procesar la operación.';
+    if (error.code === 'auth/email-already-in-use') errMsg = 'Ya existe un usuario con ese correo electrónico.';
+    else if (error.code === 'auth/weak-password') errMsg = 'La contraseña debe tener al menos 6 caracteres.';
+    else if (error.code === 'auth/invalid-email') errMsg = 'El correo electrónico no es válido.';
+    else if (error.code === 'auth/operation-not-allowed') errMsg = 'El registro por email/contraseña no está habilitado en Firebase Console.';
+    else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      errMsg = 'Tu contraseña de admin es incorrecta. No se pudo re-autenticar.';
+      adminCredentials = null;
+    }
+    errorEl.textContent = errMsg;
+    errorEl.classList.remove('hidden');
+  } finally {
+    spinner.classList.add('hidden');
+    btnText.classList.remove('hidden');
+  }
+}
+
+// --- CARGAR LISTA DE TÉCNICOS ---
+async function loadAdminTechs() {
+  const tbody = document.getElementById('admin-techs-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding: 2rem;">Cargando técnicos...</td></tr>`;
+
+  try {
+    const snapshot = await getDocs(collection(db, 'usuarios'));
+    const techs = [];
+    snapshot.forEach(docSnap => {
+      techs.push({ uid: docSnap.id, ...docSnap.data() });
+    });
+
+    if (techs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center">No hay técnicos registrados.</td></tr>`;
+      return;
+    }
+
+    // Cargar cantidad de comprobantes por técnico
+    let compCounts = {};
+    try {
+      const compSnapshot = await getDocs(collection(db, 'comprobantes'));
+      compSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        compCounts[data.tecnico_uid] = (compCounts[data.tecnico_uid] || 0) + 1;
+      });
+    } catch (e) { /* ignore if offline */ }
+
+    tbody.innerHTML = '';
+    techs.forEach(tech => {
+      const tr = document.createElement('tr');
+      const isCurrentUser = currentUser && tech.uid === currentUser.uid;
+      const rolBadge = tech.rol === 'admin'
+        ? '<span class="badge-admin">Admin</span>'
+        : '<span class="badge-tech">Técnico</span>';
+      const count = compCounts[tech.uid] || 0;
+
+      tr.innerHTML = `
+        <td><strong>${tech.nombre || 'Sin nombre'}</strong>${isCurrentUser ? ' <small style="color:var(--accent-primary)">(Tú)</small>' : ''}</td>
+        <td>${tech.email || '--'}</td>
+        <td>${tech.empresa || 'TuRed'}</td>
+        <td>${rolBadge}</td>
+        <td class="text-center">${count}</td>
+        <td class="text-center">
+          <div class="history-actions">
+            <button class="btn-icon-action btn-edit-tech" data-uid="${tech.uid}" data-nombre="${tech.nombre || ''}" data-empresa="${tech.empresa || ''}" data-email="${tech.email || ''}" title="Editar">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </button>
+            <button class="btn-icon-action btn-change-password" data-uid="${tech.uid}" data-email="${tech.email || ''}" title="Cambiar Contraseña">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </button>
+            ${!isCurrentUser && tech.rol !== 'admin' ? `
+            <button class="btn-icon-action btn-delete-tech" data-uid="${tech.uid}" data-nombre="${tech.nombre || ''}" title="Eliminar">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>` : ''}
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Event listeners
+    tbody.querySelectorAll('.btn-edit-tech').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openTechModal({
+          uid: btn.dataset.uid,
+          nombre: btn.dataset.nombre,
+          empresa: btn.dataset.empresa,
+          email: btn.dataset.email
+        });
+      });
+    });
+
+    tbody.querySelectorAll('.btn-change-password').forEach(btn => {
+      btn.addEventListener('click', () => openPasswordModal(btn.dataset.uid, btn.dataset.email));
+    });
+
+    tbody.querySelectorAll('.btn-delete-tech').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showConfirmModal(
+          `Eliminar al técnico "${btn.dataset.nombre}"`,
+          `Se eliminará la cuenta de ${btn.dataset.nombre} y todos sus datos. Esta acción no se puede deshacer.`,
+          () => deleteTech(btn.dataset.uid, btn.dataset.nombre)
+        );
+      });
+    });
+
+  } catch (error) {
+    console.error('Error cargando técnicos:', error);
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color: var(--accent-danger)">Error al cargar técnicos. Verifique su conexión.</td></tr>`;
+  }
+}
+
+// --- ELIMINAR TÉCNICO ---
+async function deleteTech(uid, nombre) {
+  try {
+    // Eliminar documento de Firestore
+    await deleteDoc(doc(db, 'usuarios', uid));
+
+    // Eliminar comprobantes del técnico
+    const q = query(collection(db, 'comprobantes'), where('tecnico_uid', '==', uid));
+    const snapshot = await getDocs(q);
+    const batch = [];
+    snapshot.forEach(docSnap => {
+      batch.push(deleteDoc(doc(db, 'comprobantes', docSnap.id)));
+    });
+    await Promise.all(batch);
+
+    console.log(`Técnico "${nombre}" eliminado junto con ${batch.length} comprobantes.`);
+    loadAdminTechs();
+    loadAllComprobantes();
+  } catch (error) {
+    console.error('Error eliminando técnico:', error);
+    alert('Error al eliminar técnico: ' + error.message);
+  }
+}
+
+// --- MODAL: CAMBIAR CONTRASEÑA ---
+function openPasswordModal(uid, email) {
+  document.getElementById('password-tech-uid').value = uid;
+  document.getElementById('password-tech-email').value = email;
+  document.getElementById('password-admin').value = '';
+  document.getElementById('password-new').value = '';
+  document.getElementById('modal-password-error').classList.add('hidden');
+  document.getElementById('modal-password-success').classList.add('hidden');
+  document.getElementById('modal-password').classList.remove('hidden');
+}
+
+async function handlePasswordChange(e) {
+  e.preventDefault();
+  const targetUid = document.getElementById('password-tech-uid').value;
+  const targetEmail = document.getElementById('password-tech-email').value;
+  const adminPw = document.getElementById('password-admin').value;
+  const newPw = document.getElementById('password-new').value;
+  const errorEl = document.getElementById('modal-password-error');
+  const successEl = document.getElementById('modal-password-success');
+  const spinner = document.getElementById('modal-password-spinner');
+
+  errorEl.classList.add('hidden');
+  successEl.classList.add('hidden');
+
+  if (!adminPw || !newPw) {
+    errorEl.textContent = 'Ambos campos son obligatorios.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  if (newPw.length < 6) {
+    errorEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  spinner.classList.remove('hidden');
+
+  try {
+    // Re-autenticar al admin
+    const credential = EmailAuthProvider.credential(currentUser.email, adminPw);
+    await reauthenticateWithCredential(currentUser, credential);
+
+    // No podemos actualizar la contraseña de OTRO usuario desde el client SDK
+    // Pero SÍ podemos actualizar la del admin mismo.
+    // Para otros usuarios, guardamos una bandera y lo hacemos al loguearse.
+    // Solución alternativa: usar Firestore para forzar cambio en el próximo login.
+    
+    if (targetUid === currentUser.uid) {
+      // Cambiando la contraseña del admin mismo
+      await firebaseUpdatePassword(currentUser, newPw);
+      successEl.textContent = 'Tu contraseña fue actualizada correctamente.';
+    } else {
+      // Para otros usuarios: guardar hash temporal en Firestore
+      await setDoc(doc(db, 'usuarios', targetUid), {
+        password_reset_pending: true,
+        new_password_hash: newPw
+      }, { merge: true });
+      successEl.textContent = `Se guardó la nueva contraseña para ${targetEmail}. Se aplicará en el próximo login.`;
+    }
+
+    successEl.classList.remove('hidden');
+    setTimeout(() => {
+      document.getElementById('modal-password').classList.add('hidden');
+    }, 2000);
+
+  } catch (error) {
+    console.error('Error cambiando contraseña:', error);
+    let errMsg = 'Error al cambiar la contraseña.';
+    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      errMsg = 'Tu contraseña actual es incorrecta.';
+    }
+    errorEl.textContent = errMsg;
+    errorEl.classList.remove('hidden');
+  } finally {
+    spinner.classList.add('hidden');
+  }
+}
+
+// --- MODAL: CONFIRMAR ELIMINACIÓN ---
+function showConfirmModal(title, message, onConfirm) {
+  document.getElementById('modal-confirm-title').textContent = title;
+  document.getElementById('modal-confirm-message').textContent = message;
+  document.getElementById('modal-confirm').classList.remove('hidden');
+
+  const btnAccept = document.getElementById('modal-confirm-accept');
+  const newBtn = btnAccept.cloneNode(true);
+  btnAccept.parentNode.replaceChild(newBtn, btnAccept);
+
+  newBtn.addEventListener('click', () => {
+    document.getElementById('modal-confirm').classList.add('hidden');
+    onConfirm();
+  });
+}
+
+// --- CARGAR TODOS LOS COMPROBANTES (VISTA ADMIN) ---
+let allAdminComprobantes = [];
+
+async function loadAllComprobantes() {
+  const tbody = document.getElementById('admin-comps-body');
+  const techFilter = document.getElementById('admin-filter-tech');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 2rem;">Cargando comprobantes...</td></tr>`;
+
+  try {
+    const snapshot = await getDocs(collection(db, 'comprobantes'));
+    allAdminComprobantes = [];
+    const techNames = {};
+
+    // Cargar nombres de técnicos
+    try {
+      const techSnapshot = await getDocs(collection(db, 'usuarios'));
+      techSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        techNames[docSnap.id] = data.nombre || data.email || docSnap.id;
+      });
+    } catch (e) { /* offline fallback */ }
+
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      allAdminComprobantes.push({
+        ...data,
+        _techName: techNames[data.tecnico_uid] || data.tecnico_nombre || 'Desconocido'
+      });
+    });
+
+    // Poblar filtro de técnicos
+    if (techFilter) {
+      const selectedVal = techFilter.value;
+      const uniqueTechs = [...new Set(allAdminComprobantes.map(c => c.tecnico_uid))];
+      techFilter.innerHTML = '<option value="">Todos los técnicos</option>';
+      uniqueTechs.forEach(uid => {
+        const name = techNames[uid] || uid;
+        techFilter.innerHTML += `<option value="${uid}">${name}</option>`;
+      });
+      techFilter.value = selectedVal;
+    }
+
+    renderAdminComprobantes();
+  } catch (error) {
+    console.error('Error cargando comprobantes admin:', error);
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color: var(--accent-danger)">Error al cargar comprobantes.</td></tr>`;
+  }
+}
+
+function renderAdminComprobantes() {
+  const tbody = document.getElementById('admin-comps-body');
+  const techFilter = document.getElementById('admin-filter-tech');
+  const statusFilter = document.getElementById('admin-filter-status');
+
+  let filtered = [...allAdminComprobantes];
+
+  if (techFilter && techFilter.value) {
+    filtered = filtered.filter(c => c.tecnico_uid === techFilter.value);
+  }
+  if (statusFilter && statusFilter.value) {
+    filtered = filtered.filter(c => c.estado === statusFilter.value);
+  }
+
+  filtered.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center">No se encontraron comprobantes con los filtros seleccionados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  filtered.forEach(c => {
+    const tr = document.createElement('tr');
+    const badgeHtml = c.estado === 'sincronizado'
+      ? '<span class="badge-sync badge-sync-online"><span class="badge-dot"></span>Sincronizado</span>'
+      : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
+
+    tr.innerHTML = `
+      <td><strong>${c.comprobante_id.toUpperCase()}</strong></td>
+      <td>${c._techName}</td>
+      <td>${c.cliente?.nombre || '--'}</td>
+      <td>${formatDate(c.fecha_creacion)}</td>
+      <td class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
+      <td class="text-center">${badgeHtml}</td>
+      <td class="text-center">
+        <div class="history-actions">
+          <a href="#/comprobante/${c.comprobante_id}" class="btn-view-receipt">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            Ver
+          </a>
+          <button class="btn-delete-receipt btn-admin-delete-comp" data-id="${c.comprobante_id}" title="Eliminar">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Event listeners para eliminar
+  tbody.querySelectorAll('.btn-admin-delete-comp').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const compId = btn.dataset.id;
+      showConfirmModal(
+        'Eliminar comprobante',
+        `Se eliminará permanentemente el comprobante ${compId.toUpperCase()}.`,
+        async () => {
+          try {
+            await deleteDoc(doc(db, 'comprobantes', compId));
+            localStorage.removeItem(`receipt_cache_${compId}`);
+            loadAllComprobantes();
+          } catch (err) {
+            console.error('Error eliminando comprobante:', err);
+            alert('Error al eliminar: ' + err.message);
+          }
+        }
+      );
+    });
+  });
 }

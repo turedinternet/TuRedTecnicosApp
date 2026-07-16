@@ -1514,3 +1514,230 @@ tr:last-child td { border-bottom: none; }
     min-height: 1270px;
   }
 }
+
+/* ==========================================================================
+   PANEL DE ADMINISTRADOR
+   ========================================================================== */
+
+.admin-avatar {
+  background: linear-gradient(135deg, var(--accent-primary), #8b5cf6) !important;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/* Botón Admin en header */
+#btn-admin {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+#btn-admin:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+/* Badges de Rol */
+.badge-admin {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent-primary), #8b5cf6);
+  color: white;
+  letter-spacing: 0.02em;
+}
+
+.badge-tech {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-glass);
+}
+
+/* Filtros del admin */
+.admin-filters {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-filters .custom-select {
+  min-width: 160px;
+}
+
+/* Botones de acción de tabla (icon only) */
+.btn-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.btn-icon-action:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: rgba(255,255,255,0.15);
+}
+.btn-edit-tech:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.btn-change-password:hover {
+  color: var(--accent-warning);
+  border-color: var(--accent-warning);
+}
+.btn-delete-tech:hover {
+  color: var(--accent-danger);
+  border-color: var(--accent-danger);
+}
+
+/* Botón Danger */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-danger);
+  color: white;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.btn-danger:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* Texto de éxito */
+.success-text {
+  color: var(--accent-success);
+  font-size: 0.875rem;
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+/* ==========================================================================
+   MODALES
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modalIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-small {
+  max-width: 400px;
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.modal-header h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+/* ==========================================================================
+   RESPONSIVE ADMIN
+   ========================================================================== */
+
+@media (max-width: 820px) {
+  .admin-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-filters .custom-select {
+    width: 100%;
+  }
+  #admin-techs-table thead,
+  #admin-comps-table thead {
+    display: none;
+  }
+  #admin-techs-table tbody tr,
+  #admin-comps-table tbody tr {
+    display: block;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    background: var(--bg-glass);
+  }
+  #admin-techs-table tbody td,
+  #admin-comps-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+    border: none;
+    text-align: right;
+  }
+  #admin-techs-table tbody td::before,
+  #admin-comps-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-align: left;
+  }
+  .modal-content {
+    max-height: 85vh;
+  }
+}
