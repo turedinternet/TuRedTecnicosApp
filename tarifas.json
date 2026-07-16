@@ -84,5 +84,53 @@
     "categoria": "Materiales",
     "precio": 500,
     "unidad": "metro"
+  },
+  {
+    "id": "plan_100mb",
+    "codigo": "PLN-001",
+    "nombre": "Plan 100 Megas",
+    "categoria": "Planes",
+    "precio": 23000,
+    "unidad": "mes"
+  },
+  {
+    "id": "plan_200mb",
+    "codigo": "PLN-002",
+    "nombre": "Plan 200 Megas",
+    "categoria": "Planes",
+    "precio": 25000,
+    "unidad": "mes"
+  },
+  {
+    "id": "plan_300mb",
+    "codigo": "PLN-003",
+    "nombre": "Plan 300 Megas",
+    "categoria": "Planes",
+    "precio": 26500,
+    "unidad": "mes"
+  },
+  {
+    "id": "plan_500mb",
+    "codigo": "PLN-004",
+    "nombre": "Plan 500 Megas",
+    "categoria": "Planes",
+    "precio": 30000,
+    "unidad": "mes"
+  },
+  {
+    "id": "plan_600mb",
+    "codigo": "PLN-005",
+    "nombre": "Plan 600 Megas",
+    "categoria": "Planes",
+    "precio": 35000,
+    "unidad": "mes"
+  },
+  {
+    "id": "plan_multimedia",
+    "codigo": "PLN-006",
+    "nombre": "Plan Multimedia",
+    "categoria": "Planes",
+    "precio": 10000,
+    "unidad": "mes"
   }
 ]
