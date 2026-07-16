@@ -741,23 +741,28 @@ function resetPanelForm() {
 async function loadComprobanteView(id) {
   let comprobante = null;
 
-  // Intentar cargar desde el localStorage (cache rápida del técnico)
-  const cached = localStorage.getItem(`receipt_cache_${id}`);
-  if (cached) {
-    comprobante = JSON.parse(cached);
+  if (isMockMode) {
+    // Mock mode: buscar en localStorage mock
+    const savedReceipts = JSON.parse(localStorage.getItem('mock_comprobantes') || '[]');
+    comprobante = savedReceipts.find(r => r.comprobante_id === id);
   } else {
-    // Si no está en la cache (ej: cliente escaneando el QR), consultar Firestore
-    if (isMockMode) {
-      const savedReceipts = JSON.parse(localStorage.getItem('mock_comprobantes') || '[]');
-      comprobante = savedReceipts.find(r => r.comprobante_id === id);
-    } else {
-      try {
-        const docRef = await getDoc(doc(db, 'comprobantes', id));
-        if (docRef.exists()) {
-          comprobante = docRef.data();
-        }
-      } catch (e) {
-        console.error('Error cargando comprobante público:', e);
+    // Firebase real: intentar Firestore primero para obtener el estado más reciente
+    try {
+      const docRef = await getDoc(doc(db, 'comprobantes', id));
+      if (docRef.exists()) {
+        comprobante = docRef.data();
+        // Actualizar cache local con el estado actual de Firestore
+        localStorage.setItem(`receipt_cache_${id}`, JSON.stringify(comprobante));
+      }
+    } catch (e) {
+      console.warn('Firestore no disponible, usando cache local:', e);
+    }
+
+    // Si Firestore no devolvió nada, caer al cache local
+    if (!comprobante) {
+      const cached = localStorage.getItem(`receipt_cache_${id}`);
+      if (cached) {
+        comprobante = JSON.parse(cached);
       }
     }
   }
@@ -926,9 +931,29 @@ async function syncOfflineComprobantes() {
       loadComprobanteView(id);
     }
   } else {
-    // Con Firebase real, Firestore maneja la cola de sincronización de manera transparente.
-    // El SDK de Firestore tiene su propio hilo de fondo que detecta la red e impacta los cambios.
-    console.log('[Sync] Firebase Firestore se encuentra en línea y gestiona la cola.');
+    // Firebase real: Firestore ya sincronizó en background, actualizar caches locales
+    console.log('[Sync] Firebase Firestore se encuentra en línea. Actualizando caches locales...');
+    try {
+      if (!currentUser) return;
+      const q = query(collection(db, 'comprobantes'), where('tecnico_uid', '==', currentUser.uid));
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        // Actualizar cache individual del comprobante
+        localStorage.setItem(`receipt_cache_${data.comprobante_id}`, JSON.stringify(data));
+      });
+      console.log('[Sync] Caches locales actualizados desde Firestore.');
+
+      // Si estamos en la vista de comprobante actual, recargar para reflejar estado
+      const hash = window.location.hash;
+      if (hash.startsWith('#/comprobante/')) {
+        const parts = hash.split('/');
+        const id = parts[parts.length - 1];
+        loadComprobanteView(id);
+      }
+    } catch (e) {
+      console.error('[Sync] Error actualizando caches locales:', e);
+    }
   }
 }
 
