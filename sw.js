@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tarifario-tured-v2';
+const CACHE_NAME = 'tarifario-tured-v3';
 const ASSETS = [
   './',
   './index.html',

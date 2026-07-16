@@ -62,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initFirebaseOrMock();
   initRouter();
   setupEventListeners();
+  setupInstallModalEvents();
+  initPWAInstallPrompt();
 });
 
 // --- 1. CAPA DE CONEXIÓN Y RED (Fase L - Link) ---
@@ -1184,9 +1186,6 @@ async function loadHistorialComprobantes() {
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             Ver
           </a>
-          <button class="btn-delete-receipt" data-id="${c.comprobante_id}" title="Eliminar comprobante">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
         </div>
       </td>
     `;
@@ -1194,41 +1193,6 @@ async function loadHistorialComprobantes() {
     historyBody.appendChild(tr);
   });
 
-  // Event listeners para eliminar comprobantes
-  document.querySelectorAll('.btn-delete-receipt').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const id = e.currentTarget.getAttribute('data-id');
-      if (confirm('¿Eliminar este comprobante? Esta acción no se puede deshacer.')) {
-        await deleteComprobante(id);
-      }
-    });
-  });
-}
-
-// Eliminar comprobante
-async function deleteComprobante(id) {
-  if (isMockMode) {
-    // Eliminar de localStorage
-    const saved = JSON.parse(localStorage.getItem('mock_comprobantes') || '[]');
-    const filtered = saved.filter(r => r.comprobante_id !== id);
-    localStorage.setItem('mock_comprobantes', JSON.stringify(filtered));
-    localStorage.removeItem(`receipt_cache_${id}`);
-    console.log('[Mock] Comprobante eliminado:', id);
-  } else {
-    // Eliminar de Firestore
-    try {
-      await deleteDoc(doc(db, 'comprobantes', id));
-      localStorage.removeItem(`receipt_cache_${id}`);
-      console.log('Comprobante eliminado de Firestore:', id);
-    } catch (e) {
-      console.error('Error al eliminar comprobante:', e);
-      alert('Error al eliminar. Intenta de nuevo.');
-      return;
-    }
-  }
-  
-  // Recargar historial
-  loadHistorialComprobantes();
 }
 
 // --- UTILERÍAS ---
@@ -1256,6 +1220,106 @@ function getPlatform() {
   if (/android/i.test(userAgent)) return 'android';
   if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) return 'ios';
   return 'web';
+}
+
+// --- INSTALACIÓN PWA ---
+
+let deferredInstallPrompt = null;
+
+function initPWAInstallPrompt() {
+  // No mostrar si ya fue instalada
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    return;
+  }
+
+  // No mostrar si el usuario ya la dismissó recientemente (7 días)
+  const dismissedAt = localStorage.getItem('pwa_install_dismissed');
+  if (dismissedAt) {
+    const daysSince = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24);
+    if (daysSince < 7) return;
+  }
+
+  // Escuchar el evento beforeinstallprompt (Chrome, Edge, Android)
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    setTimeout(() => showInstallModal(), 2500);
+  });
+
+  // Para iOS (Safari no dispara beforeinstallprompt), detectar y mostrar instrucciones
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+
+  if (isIOS && isSafari) {
+    setTimeout(() => showInstallModal('ios'), 2500);
+  }
+
+  // Si el navegador soporta PWA pero no lanzó el evento en 5s, mostrar instrucciones genéricas
+  setTimeout(() => {
+    if (!deferredInstallPrompt && !isIOS) {
+      showInstallModal('generic');
+    }
+  }, 5000);
+}
+
+function showInstallModal(platform) {
+  // No volver a mostrar si ya está visible
+  if (!document.getElementById('modal-install').classList.contains('hidden')) return;
+
+  const stepsContainer = document.getElementById('install-steps');
+  const btnAccept = document.getElementById('btn-install-accept');
+
+  if (platform === 'ios') {
+    stepsContainer.innerHTML = `
+      <div class="step"><span class="step-num">1</span><span>Tocá el botón <strong>Compartir</strong> ↑ en Safari</span></div>
+      <div class="step"><span class="step-num">2</span><span>Seleccioná <strong>"Agregar a pantalla de inicio"</strong></span></div>
+      <div class="step"><span class="step-num">3</span><span>Tocá <strong>"Agregar"</strong> para confirmar</span></div>
+    `;
+    // En iOS no podemos instalar programáticamente, ocultamos el botón de install
+    btnAccept.style.display = 'none';
+  } else if (platform === 'generic') {
+    stepsContainer.innerHTML = `
+      <div class="step"><span class="step-num">1</span><span>En el menú del navegador, buscá <strong>"Instalar app"</strong> o <strong>"Agregar a pantalla de inicio"</strong></span></div>
+      <div class="step"><span class="step-num">2</span><span>Confirmá la instalación</span></div>
+      <div class="step"><span class="step-num">3</span><span>¡Listo! Accedé desde tu pantalla de inicio</span></div>
+    `;
+    btnAccept.style.display = 'none';
+  } else {
+    stepsContainer.innerHTML = `
+      <div class="step"><span class="step-num">1</span><span>Tocá <strong>"Instalar App"</strong> más abajo</span></div>
+      <div class="step"><span class="step-num">2</span><span>Confirmá la instalación en el diálogo del navegador</span></div>
+      <div class="step"><span class="step-num">3</span><span>¡Listo! Accedé desde tu pantalla de inicio</span></div>
+    `;
+    btnAccept.style.display = '';
+  }
+
+  document.getElementById('modal-install').classList.remove('hidden');
+}
+
+function setupInstallModalEvents() {
+  const btnAccept = document.getElementById('btn-install-accept');
+  const btnDismiss = document.getElementById('btn-install-dismiss');
+  const modal = document.getElementById('modal-install');
+
+  if (btnAccept) {
+    btnAccept.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        console.log('[PWA] User install choice:', outcome);
+        deferredInstallPrompt = null;
+      }
+      modal.classList.add('hidden');
+    });
+  }
+
+  if (btnDismiss) {
+    btnDismiss.addEventListener('click', () => {
+      localStorage.setItem('pwa_install_dismissed', Date.now().toString());
+      modal.classList.add('hidden');
+    });
+  }
 }
 
 // ==========================================================================

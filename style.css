@@ -1704,6 +1704,85 @@ tr:last-child td { border-bottom: none; }
 }
 
 /* ==========================================================================
+   MODAL INSTALACIÓN PWA
+   ========================================================================== */
+.modal-install {
+  text-align: center;
+  padding: clamp(1.5rem, 4vw, 2.5rem) !important;
+}
+
+.install-icon-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+.install-logo {
+  width: clamp(64px, 18vw, 88px);
+  height: clamp(64px, 18vw, 88px);
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(0, 124, 195, 0.4));
+  border-radius: var(--radius-md);
+}
+
+.install-title {
+  font-size: clamp(1.1rem, 3vw, 1.4rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.install-description {
+  font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+  color: var(--text-secondary);
+  margin-bottom: 1.25rem;
+  line-height: 1.5;
+}
+
+.install-steps {
+  text-align: left;
+  background: rgba(0, 124, 195, 0.08);
+  border: 1px solid rgba(0, 124, 195, 0.2);
+  border-radius: var(--radius-sm);
+  padding: clamp(0.75rem, 2vw, 1rem);
+  margin-bottom: 1.5rem;
+  font-size: clamp(0.75rem, 1.6vw, 0.85rem);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.install-steps .step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.install-steps .step:last-child {
+  margin-bottom: 0;
+}
+
+.install-steps .step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.install-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ==========================================================================
    RESPONSIVE ADMIN
    ========================================================================== */
 
