@@ -1202,11 +1202,6 @@ async function loadComprobanteView(id) {
       cobroBadge.className = 'receipt-cobro-badge cobro-none';
     }
   }
-    } else {
-      cobroBadge.textContent = 'Método de Cobro: No registrado';
-      cobroBadge.className = 'receipt-cobro-badge cobro-none';
-    }
-  }
 
   // Emisor
   document.getElementById('r-tech-name').textContent = escapeHtml(comprobante.tecnico_nombre);
