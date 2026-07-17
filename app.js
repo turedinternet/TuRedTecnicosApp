@@ -39,6 +39,8 @@ let isAdmin = false;
 let tarifario = [];
 let cartItems = [];
 let selectedPaymentMethod = 'contado'; // 'contado' o 'cuotas'
+let cobroEfectivo = 0;
+let cobroTransferencia = 0;
 
 // Tarifario por defecto (Fallback Offline / Mock)
 const defaultTarifario = [
@@ -136,7 +138,189 @@ function enableMockMode(reason) {
     .catch(() => {
       tarifario = [...defaultTarifario];
       updateTarifarioDropdown();
+  });
+}
+
+// --- RENDICIÓN DE CAJA (VISTA ADMIN) ---
+
+async function loadRendicionCaja() {
+  const tbody = document.getElementById('caja-body');
+  if (!tbody) return;
+
+  // Establecer rango por defecto: últimos 30 días si no hay fechas seleccionadas
+  const filterDateFrom = document.getElementById('caja-filter-from');
+  const filterDateTo = document.getElementById('caja-filter-to');
+  if (filterDateFrom && filterDateTo && !filterDateFrom.value && !filterDateTo.value) {
+    const today = new Date();
+    const from = new Date(today);
+    from.setDate(from.getDate() - 30);
+    filterDateFrom.value = from.toISOString().split('T')[0];
+    filterDateTo.value = today.toISOString().split('T')[0];
+  }
+
+  tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding: 2rem;">Cargando comprobantes...</td></tr>`;
+
+  let comprobantes = [];
+
+  if (isMockMode) {
+    const saved = localStorage.getItem('mock_comprobantes');
+    if (saved) {
+      comprobantes = JSON.parse(saved).map(c => ({
+        ...c,
+        _techName: currentTechData.nombre || 'Técnico'
+      }));
+    }
+  } else {
+    try {
+      const snapshot = await getDocs(collection(db, 'comprobantes'));
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        comprobantes.push({
+          ...data,
+          _techName: allTechNames[data.tecnico_uid] || data.tecnico_nombre || 'Desconocido'
+        });
+      });
+    } catch (e) {
+      console.error('Error cargando comprobantes para caja:', e);
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="color: var(--accent-danger)">Error al cargar comprobantes.</td></tr>`;
+      return;
+    }
+  }
+
+  // Aplicar filtros
+  const filterTech = document.getElementById('caja-filter-tech');
+
+  let filtered = [...comprobantes];
+
+  if (filterDateFrom && filterDateFrom.value) {
+    const from = new Date(filterDateFrom.value + 'T00:00:00');
+    filtered = filtered.filter(c => new Date(c.fecha_creacion) >= from);
+  }
+  if (filterDateTo && filterDateTo.value) {
+    const to = new Date(filterDateTo.value + 'T23:59:59');
+    filtered = filtered.filter(c => new Date(c.fecha_creacion) <= to);
+  }
+  if (filterTech && filterTech.value) {
+    filtered = filtered.filter(c => c.tecnico_uid === filterTech.value);
+  }
+
+  // Poblar filtro de técnicos
+  if (filterTech) {
+    const uniqueTechs = [...new Set(comprobantes.map(c => c.tecnico_uid))];
+    const currentVal = filterTech.value;
+    filterTech.innerHTML = '<option value="">Todos los técnicos</option>';
+    uniqueTechs.forEach(uid => {
+      const name = allTechNames[uid] || uid;
+      filterTech.innerHTML += `<option value="${escapeHtml(uid)}">${escapeHtml(name)}</option>`;
     });
+    filterTech.value = currentVal;
+  }
+
+  // Calcular resumen
+  renderCajaSummary(filtered);
+
+  // Renderizar tabla
+  renderCajaTable(filtered);
+}
+
+function renderCajaSummary(comprobantes) {
+  let totalEfectivo = 0;
+  let totalTransferencia = 0;
+  let totalCobrado = 0;
+  let totalPendiente = 0;
+
+  comprobantes.forEach(c => {
+    if (c.metodo_cobro) {
+      totalEfectivo += c.metodo_cobro.efectivo || 0;
+      totalTransferencia += c.metodo_cobro.transferencia || 0;
+      const pend = c.metodo_cobro.pendiente != null ? c.metodo_cobro.pendiente : Math.max(0, (c.total || 0) - (c.metodo_cobro.efectivo || 0) - (c.metodo_cobro.transferencia || 0));
+      totalPendiente += pend;
+    } else {
+      totalEfectivo += c.total || 0;
+    }
+    totalCobrado += c.total || 0;
+  });
+
+  const summaryEl = document.getElementById('caja-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="caja-card">
+        <div class="caja-card-value" style="color: var(--accent-success)">${formatCurrency(totalEfectivo)}</div>
+        <div class="caja-card-label">Efectivo</div>
+      </div>
+      <div class="caja-card">
+        <div class="caja-card-value" style="color: #3b82f6">${formatCurrency(totalTransferencia)}</div>
+        <div class="caja-card-label">Transferencia</div>
+      </div>
+      <div class="caja-card">
+        <div class="caja-card-value" style="color: var(--accent-danger)">${formatCurrency(totalPendiente)}</div>
+        <div class="caja-card-label">Pendiente</div>
+      </div>
+      <div class="caja-card">
+        <div class="caja-card-value" style="color: var(--accent-secondary)">${formatCurrency(totalEfectivo + totalTransferencia)}</div>
+        <div class="caja-card-label">Total Cobrado</div>
+      </div>
+    `;
+  }
+
+  const countEl = document.getElementById('caja-count');
+  if (countEl) {
+    countEl.textContent = `${comprobantes.length} comprobante${comprobantes.length !== 1 ? 's' : ''}`;
+  }
+}
+
+function renderCajaTable(comprobantes) {
+  const tbody = document.getElementById('caja-body');
+  if (!tbody) return;
+
+  comprobantes.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+
+  if (comprobantes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center">No se encontraron comprobantes para el rango seleccionado.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  comprobantes.forEach(c => {
+    const tr = document.createElement('tr');
+    const badgeHtml = c.estado === 'sincronizado'
+      ? '<span class="badge-sync badge-sync-online"><span class="badge-dot"></span>Sincronizado</span>'
+      : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
+
+    let cobroHtml = '<span class="badge-cobro badge-cobro-none">No reg.</span>';
+    let efectivoVal = 0;
+    let transferenciaVal = 0;
+    let pendienteVal = 0;
+    if (c.metodo_cobro) {
+      efectivoVal = c.metodo_cobro.efectivo || 0;
+      transferenciaVal = c.metodo_cobro.transferencia || 0;
+      pendienteVal = c.metodo_cobro.pendiente != null ? c.metodo_cobro.pendiente : Math.max(0, (c.total || 0) - efectivoVal - transferenciaVal);
+      if (pendienteVal > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-pendiente">Pendiente</span>`;
+      } else if (efectivoVal > 0 && transferenciaVal > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-mixed">Mixto</span>`;
+      } else if (transferenciaVal > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-transferencia">Transferencia</span>`;
+      } else {
+        cobroHtml = `<span class="badge-cobro badge-cobro-efectivo">Efectivo</span>`;
+      }
+    } else {
+      efectivoVal = c.total || 0;
+    }
+
+    tr.innerHTML = `
+      <td data-label="Comprobante"><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
+      <td data-label="Técnico">${escapeHtml(c._techName)}</td>
+      <td data-label="Cliente">${escapeHtml(c.cliente?.nombre) || '--'}</td>
+      <td data-label="Fecha">${formatDate(c.fecha_creacion)}</td>
+      <td data-label="Efectivo" class="text-right" style="color: var(--accent-success); font-weight: 600">${formatCurrency(efectivoVal)}</td>
+      <td data-label="Transferencia" class="text-right" style="color: #3b82f6; font-weight: 600">${formatCurrency(transferenciaVal)}</td>
+      <td data-label="Pendiente" class="text-right" style="color: ${pendienteVal > 0 ? 'var(--accent-danger)' : 'var(--accent-secondary)'}; font-weight: 600">${formatCurrency(pendienteVal)}</td>
+      <td data-label="Total" class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
+      <td data-label="Cobro" class="text-center">${cobroHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 // --- 2. CAPA DE NAVEGACIÓN Y RUTAS (Fase A - Architect) ---
@@ -392,27 +576,79 @@ function setupEventListeners() {
   const clientAddress = document.getElementById('client-address');
   
   const validateForm = () => {
-    btnGenerateReceipt.disabled = !(clientName.value.trim() && clientAddress.value.trim() && cartItems.length > 0);
+    const subtotal = cartItems.reduce((acc, curr) => acc + curr.subtotal, 0);
+    const cobroValid = subtotal === 0 || (cobroEfectivo + cobroTransferencia <= subtotal);
+    btnGenerateReceipt.disabled = !(clientName.value.trim() && clientAddress.value.trim() && cartItems.length > 0 && cobroValid);
   };
   
   clientName.addEventListener('input', validateForm);
   clientAddress.addEventListener('input', validateForm);
 
+  // --- COBRO: Inputs de Método de Cobro (Efectivo / Transferencia) ---
+  const inputCobroEfectivo = document.getElementById('cobro-efectivo');
+  const inputCobroTransferencia = document.getElementById('cobro-transferencia');
+  const cobroValidation = document.getElementById('cobro-validation');
+  if (inputCobroEfectivo && inputCobroTransferencia) {
+    const syncCobroFrom = (source) => {
+      const subtotal = cartItems.reduce((acc, curr) => acc + curr.subtotal, 0);
+      if (source === 'efectivo') {
+        cobroEfectivo = Math.max(0, parseFloat(inputCobroEfectivo.value) || 0);
+      } else {
+        cobroTransferencia = Math.max(0, parseFloat(inputCobroTransferencia.value) || 0);
+      }
+      updateCobroValidation(subtotal);
+      validateForm();
+    };
+
+    inputCobroEfectivo.addEventListener('input', () => syncCobroFrom('efectivo'));
+    inputCobroTransferencia.addEventListener('input', () => syncCobroFrom('transferencia'));
+
+    if (cobroValidation) {
+      cobroValidation.addEventListener('click', () => {
+        const subtotal = cartItems.reduce((acc, curr) => acc + curr.subtotal, 0);
+        cobroEfectivo = subtotal;
+        cobroTransferencia = 0;
+        inputCobroEfectivo.value = subtotal > 0 ? subtotal : '';
+        inputCobroTransferencia.value = '';
+        updateCobroValidation(subtotal);
+        validateForm();
+      });
+    }
+  }
+
   // --- ADMIN: Pestañas ---
   const tabAdminTechs = document.getElementById('tab-admin-techs');
   const tabAdminComps = document.getElementById('tab-admin-comps');
-  if (tabAdminTechs && tabAdminComps) {
-    tabAdminTechs.addEventListener('click', () => {
-      tabAdminTechs.classList.add('active');
-      tabAdminComps.classList.remove('active');
-      document.getElementById('admin-techs-container').classList.remove('hidden');
-      document.getElementById('admin-comps-container').classList.add('hidden');
+  const tabAdminCaja = document.getElementById('tab-admin-caja');
+  const allAdminTabs = [tabAdminTechs, tabAdminComps, tabAdminCaja].filter(Boolean);
+  const allAdminContainers = ['admin-techs-container', 'admin-comps-container', 'admin-caja-container'];
+
+  function switchAdminTab(activeTab) {
+    allAdminTabs.forEach(t => t.classList.remove('active'));
+    activeTab.classList.add('active');
+    allAdminContainers.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
     });
+  }
+
+  if (tabAdminTechs) {
+    tabAdminTechs.addEventListener('click', () => {
+      switchAdminTab(tabAdminTechs);
+      document.getElementById('admin-techs-container').classList.remove('hidden');
+    });
+  }
+  if (tabAdminComps) {
     tabAdminComps.addEventListener('click', () => {
-      tabAdminComps.classList.add('active');
-      tabAdminTechs.classList.remove('active');
+      switchAdminTab(tabAdminComps);
       document.getElementById('admin-comps-container').classList.remove('hidden');
-      document.getElementById('admin-techs-container').classList.add('hidden');
+    });
+  }
+  if (tabAdminCaja) {
+    tabAdminCaja.addEventListener('click', () => {
+      switchAdminTab(tabAdminCaja);
+      document.getElementById('admin-caja-container').classList.remove('hidden');
+      loadRendicionCaja();
     });
   }
 
@@ -459,6 +695,16 @@ function setupEventListeners() {
   if (adminFilterTech) adminFilterTech.addEventListener('change', loadAllComprobantes);
   if (adminFilterStatus) adminFilterStatus.addEventListener('change', loadAllComprobantes);
   if (btnRefreshAdminComps) btnRefreshAdminComps.addEventListener('click', loadAllComprobantes);
+
+  // --- ADMIN: Filtros de Rendición de Caja ---
+  const cajaFilterFrom = document.getElementById('caja-filter-from');
+  const cajaFilterTo = document.getElementById('caja-filter-to');
+  const cajaFilterTech = document.getElementById('caja-filter-tech');
+  const btnRefreshCaja = document.getElementById('btn-refresh-caja');
+  if (cajaFilterFrom) cajaFilterFrom.addEventListener('change', loadRendicionCaja);
+  if (cajaFilterTo) cajaFilterTo.addEventListener('change', loadRendicionCaja);
+  if (cajaFilterTech) cajaFilterTech.addEventListener('change', loadRendicionCaja);
+  if (btnRefreshCaja) btnRefreshCaja.addEventListener('click', loadRendicionCaja);
 }
 
 // Handler de Inicio de Sesión
@@ -737,12 +983,44 @@ function updateTotalsUI(subtotal) {
   document.getElementById('summary-subtotal').textContent = formatCurrency(subtotal);
   document.getElementById('summary-total').textContent = formatCurrency(total);
 
-  // Validar campos del formulario
-  const clientName = document.getElementById('client-name').value.trim();
-  const clientAddress = document.getElementById('client-address').value.trim();
-  const btnGenerateReceipt = document.getElementById('btn-generate-receipt');
+  // Resetear cobro cuando cambia el carrito
+  const inputCobroEfectivo = document.getElementById('cobro-efectivo');
+  const inputCobroTransferencia = document.getElementById('cobro-transferencia');
+  if (inputCobroEfectivo && inputCobroTransferencia) {
+    cobroEfectivo = total;
+    cobroTransferencia = 0;
+    inputCobroEfectivo.value = total > 0 ? total : '';
+    inputCobroTransferencia.value = '';
+    updateCobroValidation(total);
+  }
 
+  // Validar campos del formulario
+  const btnGenerateReceipt = document.getElementById('btn-generate-receipt');
+  const clientName = document.getElementById('client-name')?.value.trim() || '';
+  const clientAddress = document.getElementById('client-address')?.value.trim() || '';
   btnGenerateReceipt.disabled = !(clientName && clientAddress && cartItems.length > 0);
+}
+
+function updateCobroValidation(subtotal) {
+  const cobroValidation = document.getElementById('cobro-validation');
+  if (!cobroValidation) return;
+  if (subtotal <= 0) {
+    cobroValidation.textContent = '';
+    cobroValidation.className = '';
+    return;
+  }
+  const cobrado = cobroEfectivo + cobroTransferencia;
+  const pendiente = Math.max(0, subtotal - cobrado);
+  if (cobrado === 0) {
+    cobroValidation.textContent = 'No se ha registrado ningún cobro';
+    cobroValidation.className = 'cobro-invalid';
+  } else if (pendiente === 0) {
+    cobroValidation.textContent = `Total cobrado: ${formatCurrency(cobrado)} — Pago completo`;
+    cobroValidation.className = 'cobro-valid';
+  } else {
+    cobroValidation.textContent = `Cobrado: ${formatCurrency(cobrado)} — Pendiente: ${formatCurrency(pendiente)}`;
+    cobroValidation.className = 'cobro-pendiente';
+  }
 }
 
 // Generación y almacenamiento del comprobante (Offline-first)
@@ -778,6 +1056,11 @@ async function generateComprobante() {
     subtotal: subtotal,
     total: total,
     observaciones: notes,
+    metodo_cobro: {
+      efectivo: cobroEfectivo,
+      transferencia: cobroTransferencia,
+      pendiente: Math.max(0, total - cobroEfectivo - cobroTransferencia)
+    },
     estado: navigator.onLine ? 'sincronizado' : 'pendiente_sincronizacion',
     fecha_sincronizacion: navigator.onLine ? new Date().toISOString() : null,
     intentos_sincronizacion: 0,
@@ -820,6 +1103,14 @@ function resetPanelForm() {
   document.getElementById('client-phone').value = '';
   document.getElementById('client-email').value = '';
   document.getElementById('receipt-notes').value = '';
+  cobroEfectivo = 0;
+  cobroTransferencia = 0;
+  const inputCobroEfectivo = document.getElementById('cobro-efectivo');
+  const inputCobroTransferencia = document.getElementById('cobro-transferencia');
+  if (inputCobroEfectivo) inputCobroEfectivo.value = '';
+  if (inputCobroTransferencia) inputCobroTransferencia.value = '';
+  const cobroValidation = document.getElementById('cobro-validation');
+  if (cobroValidation) { cobroValidation.textContent = ''; cobroValidation.className = ''; }
   updateCartTable();
 }
 
@@ -886,6 +1177,35 @@ async function loadComprobanteView(id) {
   } else {
     syncBadge.textContent = 'Pendiente de Sincronización';
     syncBadge.className = 'receipt-sync-badge sync-status-offline';
+  }
+
+  // Badge de Cobro
+  const cobroBadge = document.getElementById('r-cobro-badge');
+  if (cobroBadge) {
+    if (comprobante.metodo_cobro) {
+      const ef = comprobante.metodo_cobro.efectivo || 0;
+      const tr = comprobante.metodo_cobro.transferencia || 0;
+      const pend = comprobante.metodo_cobro.pendiente != null ? comprobante.metodo_cobro.pendiente : Math.max(0, (comprobante.total || 0) - ef - tr);
+      const parts = [];
+      if (ef > 0) parts.push(`Efectivo ${formatCurrency(ef)}`);
+      if (tr > 0) parts.push(`Transferencia ${formatCurrency(tr)}`);
+      if (pend > 0) parts.push(`Pendiente ${formatCurrency(pend)}`);
+      if (parts.length > 0) {
+        cobroBadge.textContent = `Cobro: ${parts.join(' / ')}`;
+        cobroBadge.className = pend > 0 ? 'receipt-cobro-badge cobro-pendiente' : 'receipt-cobro-badge cobro-efectivo';
+      } else {
+        cobroBadge.textContent = 'Cobro: No registrado';
+        cobroBadge.className = 'receipt-cobro-badge cobro-none';
+      }
+    } else {
+      cobroBadge.textContent = 'Método de Cobro: No registrado';
+      cobroBadge.className = 'receipt-cobro-badge cobro-none';
+    }
+  }
+    } else {
+      cobroBadge.textContent = 'Método de Cobro: No registrado';
+      cobroBadge.className = 'receipt-cobro-badge cobro-none';
+    }
   }
 
   // Emisor
@@ -1104,7 +1424,7 @@ async function loadHistorialComprobantes() {
 
   historyBody.innerHTML = `
     <tr>
-      <td colspan="6" class="text-center">
+      <td colspan="7" class="text-center">
         <div style="display: flex; justify-content: center; align-items: center; padding: 1.5rem; gap: 0.5rem; color: var(--text-secondary)">
           Cargando comprobantes... <div class="spinner" style="border-width: 2px; width: 16px; height: 16px;"></div>
         </div>
@@ -1157,7 +1477,7 @@ async function loadHistorialComprobantes() {
   if (comprobantes.length === 0) {
     historyBody.innerHTML = `
       <tr class="empty-row">
-        <td colspan="6" class="text-center">No se han emitido comprobantes en este dispositivo aún.</td>
+        <td colspan="7" class="text-center">No se han emitido comprobantes en este dispositivo aún.</td>
       </tr>
     `;
     return;
@@ -1174,13 +1494,31 @@ async function loadHistorialComprobantes() {
       badgeHtml = `<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>`;
     }
 
+    // Badge de cobro
+    let cobroHtml = '<span class="badge-cobro badge-cobro-none">No registrado</span>';
+    if (c.metodo_cobro) {
+      const ef = c.metodo_cobro.efectivo || 0;
+      const trans = c.metodo_cobro.transferencia || 0;
+      const pend = c.metodo_cobro.pendiente != null ? c.metodo_cobro.pendiente : Math.max(0, (c.total || 0) - ef - trans);
+      if (pend > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-pendiente">${formatCurrency(ef + trans)} / ${formatCurrency(pend)} pda.</span>`;
+      } else if (ef > 0 && trans > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-mixed">${formatCurrency(ef)} / ${formatCurrency(trans)}</span>`;
+      } else if (trans > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-transferencia">Transferencia</span>`;
+      } else {
+        cobroHtml = `<span class="badge-cobro badge-cobro-efectivo">Efectivo</span>`;
+      }
+    }
+
     tr.innerHTML = `
-      <td><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
-      <td>${escapeHtml(c.cliente.nombre)}<br><small style="color: var(--text-secondary)">${escapeHtml(c.cliente.direccion)}</small></td>
-      <td>${formatDate(c.fecha_creacion)}</td>
-      <td class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
-      <td class="text-center">${badgeHtml}</td>
-      <td class="text-center">
+      <td data-label="Comprobante"><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
+      <td data-label="Cliente">${escapeHtml(c.cliente.nombre)}<br><small style="color: var(--text-secondary)">${escapeHtml(c.cliente.direccion)}</small></td>
+      <td data-label="Fecha">${formatDate(c.fecha_creacion)}</td>
+      <td data-label="Total" class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
+      <td data-label="Cobro" class="text-center">${cobroHtml}</td>
+      <td data-label="Sync" class="text-center">${badgeHtml}</td>
+      <td data-label="Acciones" class="text-center">
         <div class="history-actions">
           <a href="#/comprobante/${escapeHtml(c.comprobante_id)}" class="btn-view-receipt">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -1673,6 +2011,7 @@ function showConfirmModal(title, message, onConfirm) {
 
 // --- CARGAR TODOS LOS COMPROBANTES (VISTA ADMIN) ---
 let allAdminComprobantes = [];
+let allTechNames = {};
 
 async function loadAllComprobantes() {
   const tbody = document.getElementById('admin-comps-body');
@@ -1694,6 +2033,7 @@ async function loadAllComprobantes() {
         techNames[docSnap.id] = data.nombre || data.email || docSnap.id;
       });
     } catch (e) { /* offline fallback */ }
+    allTechNames = { ...techNames };
 
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
