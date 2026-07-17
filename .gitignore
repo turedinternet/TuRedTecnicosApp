@@ -22,6 +22,7 @@ config.json
 
 # Source files
 *.txt
+*.csv
 
 # OS / Editor
 .DS_Store

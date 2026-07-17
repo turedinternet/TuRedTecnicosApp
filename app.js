@@ -41,6 +41,9 @@ let cartItems = [];
 let selectedPaymentMethod = 'contado'; // 'contado' o 'cuotas'
 let cobroEfectivo = 0;
 let cobroTransferencia = 0;
+let allAdminComprobantes = [];
+let allTechNames = {};
+let clientesCache = null; // Cache de clientes en memoria (cargado de localStorage o Firestore)
 
 // Tarifario por defecto (Fallback Offline / Mock)
 const defaultTarifario = [
@@ -98,6 +101,8 @@ function initNetworkMonitoring() {
     if (navigator.onLine && !isMockMode) {
       syncOfflineComprobantes();
     }
+    // Precargar cache de clientes en background (para lookup offline)
+    preloadClientesCache();
   }, 2000);
 }
 
@@ -629,8 +634,9 @@ function setupEventListeners() {
   const tabAdminTechs = document.getElementById('tab-admin-techs');
   const tabAdminComps = document.getElementById('tab-admin-comps');
   const tabAdminCaja = document.getElementById('tab-admin-caja');
-  const allAdminTabs = [tabAdminTechs, tabAdminComps, tabAdminCaja].filter(Boolean);
-  const allAdminContainers = ['admin-techs-container', 'admin-comps-container', 'admin-caja-container'];
+  const tabAdminClients = document.getElementById('tab-admin-clients');
+  const allAdminTabs = [tabAdminTechs, tabAdminComps, tabAdminCaja, tabAdminClients].filter(Boolean);
+  const allAdminContainers = ['admin-techs-container', 'admin-comps-container', 'admin-caja-container', 'admin-clients-container'];
 
   function switchAdminTab(activeTab) {
     allAdminTabs.forEach(t => t.classList.remove('active'));
@@ -658,6 +664,13 @@ function setupEventListeners() {
       switchAdminTab(tabAdminCaja);
       document.getElementById('admin-caja-container').classList.remove('hidden');
       loadRendicionCaja();
+    });
+  }
+  if (tabAdminClients) {
+    tabAdminClients.addEventListener('click', () => {
+      switchAdminTab(tabAdminClients);
+      document.getElementById('admin-clients-container').classList.remove('hidden');
+      renderAdminClients();
     });
   }
 
@@ -714,6 +727,123 @@ function setupEventListeners() {
   if (cajaFilterTo) cajaFilterTo.addEventListener('change', loadRendicionCaja);
   if (cajaFilterTech) cajaFilterTech.addEventListener('change', loadRendicionCaja);
   if (btnRefreshCaja) btnRefreshCaja.addEventListener('click', loadRendicionCaja);
+
+  // --- CLIENTES: Lookup por N° Cliente (debounced) ---
+  const clientIdInput = document.getElementById('client-id');
+  if (clientIdInput) {
+    const doLookup = debounce(() => {
+      const codigo = clientIdInput.value.trim();
+      if (codigo.length < 3) return;
+      const client = lookupClient(codigo);
+      if (client) {
+        document.getElementById('client-name').value = client.nombre || '';
+        document.getElementById('client-address').value = client.domicilio || '';
+        document.getElementById('client-phone').value = client.telefonos || '';
+        document.getElementById('client-email').value = client.emails || '';
+        // Visual feedback
+        clientIdInput.style.borderColor = 'var(--accent-success)';
+        setTimeout(() => { clientIdInput.style.borderColor = ''; }, 2000);
+      }
+    }, 400);
+    clientIdInput.addEventListener('input', doLookup);
+  }
+
+  // --- ADMIN: Modal CSV Clientes ---
+  const btnUploadCSV = document.getElementById('btn-upload-csv');
+  const modalClientsCSV = document.getElementById('modal-clients-csv');
+  const modalClientsClose = document.getElementById('modal-clients-csv-close');
+  const modalClientsCancel = document.getElementById('modal-clients-csv-cancel');
+  const csvFileInput = document.getElementById('csv-file-input');
+  const csvPreview = document.getElementById('csv-preview');
+  const csvUploadStatus = document.getElementById('csv-upload-status');
+
+  if (btnUploadCSV && modalClientsCSV) {
+    btnUploadCSV.addEventListener('click', () => {
+      csvPreview.innerHTML = '';
+      csvUploadStatus.classList.add('hidden');
+      modalClientsCSV.classList.remove('hidden');
+    });
+  }
+  if (modalClientsClose) modalClientsClose.addEventListener('click', () => modalClientsCSV.classList.add('hidden'));
+  if (modalClientsCancel) modalClientsCancel.addEventListener('click', () => modalClientsCSV.classList.add('hidden'));
+
+  if (csvFileInput) {
+    csvFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      csvUploadStatus.classList.add('hidden');
+      const text = await file.text();
+      const clientsMap = parseClientCSV(text);
+      const codes = Object.keys(clientsMap);
+      if (codes.length === 0) {
+        csvPreview.innerHTML = '<p style="color:var(--accent-danger)">No se encontraron clientes válidos en el CSV.</p>';
+        return;
+      }
+      // Calcular tamaño del JSON string que se subirá
+      const jsonString = JSON.stringify(clientsMap);
+      const sizeKB = Math.round(new Blob([jsonString]).size / 1024);
+      const sizeWarning = sizeKB > 900 ? '<p style="color:var(--accent-danger);font-size:0.8rem;margin-top:0.3rem;">⚠️ El archivo es grande. Firestore tiene un límite de 1024 KB por documento.</p>' : '';
+      csvPreview.innerHTML = `
+        <p><strong>${codes.length}</strong> clientes encontrados en el archivo.</p>
+        <p style="color:var(--text-secondary);font-size:0.8rem;">Tamaño en Firestore: <strong>${sizeKB} KB</strong> / 1024 KB${sizeWarning}</p>
+        <div style="max-height:200px;overflow-y:auto;margin:0.5rem 0;border:1px solid var(--border);border-radius:8px;padding:0.5rem;font-size:0.8rem;">
+          ${codes.slice(0, 20).map(c => `<div><strong>${escapeHtml(c)}</strong> — ${escapeHtml(clientsMap[c].n || '')}</div>`).join('')}
+          ${codes.length > 20 ? `<div style="color:var(--text-secondary);margin-top:0.3rem;">... y ${codes.length - 20} más</div>` : ''}
+        </div>
+        <button id="btn-confirm-csv-upload" class="btn btn-primary w-100 mt-2" ${sizeKB > 950 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+          <span id="csv-upload-btn-text">Subir ${codes.length} clientes a Firestore (${sizeKB} KB)</span>
+          <div class="spinner hidden" id="csv-upload-spinner"></div>
+        </button>
+      `;
+      if (sizeKB <= 950) {
+        document.getElementById('btn-confirm-csv-upload').addEventListener('click', async () => {
+          const btnText = document.getElementById('csv-upload-btn-text');
+          const spinner = document.getElementById('csv-upload-spinner');
+          btnText.classList.add('hidden');
+          spinner.classList.remove('hidden');
+          try {
+            const result = await uploadClientsToFirestore(clientsMap);
+            csvUploadStatus.className = '';
+            csvUploadStatus.style.color = 'var(--accent-success)';
+            csvUploadStatus.textContent = `✅ ${result.count} clientes subidos correctamente (${result.sizeKB} KB). 1 solo documento en Firestore.`;
+            csvUploadStatus.classList.remove('hidden');
+            renderAdminClients();
+            setTimeout(() => { modalClientsCSV.classList.add('hidden'); }, 1500);
+          } catch (err) {
+            csvUploadStatus.className = '';
+            csvUploadStatus.style.color = 'var(--accent-danger)';
+            csvUploadStatus.textContent = `❌ Error: ${err.message}`;
+            csvUploadStatus.classList.remove('hidden');
+          } finally {
+            btnText.classList.remove('hidden');
+            spinner.classList.add('hidden');
+          }
+        });
+      }
+    });
+  }
+
+  // --- CSV Upload Zone: Drag & Drop + Click ---
+  const csvUploadZone = document.getElementById('csv-upload-zone');
+  const btnSelectCSV = document.getElementById('btn-select-csv');
+  if (csvUploadZone && csvFileInput) {
+    csvUploadZone.addEventListener('click', (e) => {
+      if (e.target === btnSelectCSV || e.target.closest('#btn-select-csv')) return;
+      csvFileInput.click();
+    });
+    if (btnSelectCSV) btnSelectCSV.addEventListener('click', () => csvFileInput.click());
+    csvUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); csvUploadZone.classList.add('drag-over'); });
+    csvUploadZone.addEventListener('dragleave', () => csvUploadZone.classList.remove('drag-over'));
+    csvUploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      csvUploadZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.csv')) {
+        csvFileInput.files = e.dataTransfer.files;
+        csvFileInput.dispatchEvent(new Event('change'));
+      }
+    });
+  }
 }
 
 // Handler de Inicio de Sesión
@@ -1702,6 +1832,194 @@ function setupInstallModalEvents() {
 // FUNCIONES DEL PANEL DE ADMINISTRADOR
 // ==========================================================================
 
+// --- CLIENTES: UTILIDADES ---
+function debounce(fn, delay = 400) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+// Parsea CSV → objeto JSON claveado por código con campos abreviados
+// Entrada: CSV con columnas Código,Nombre,Domicilio,Teléfonos,Emails
+// Salida: { "010460": { n: "nombre", d: "domicilio", t: "telefonos", e: "emails" }, ... }
+function parseClientCSV(csvText) {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return {};
+  const clients = {};
+  for (let i = 1; i < lines.length; i++) {
+    const row = lines[i].trim();
+    if (!row) continue;
+    const fields = [];
+    let current = '';
+    let inQuotes = false;
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[c];
+      if (inQuotes) {
+        if (ch === '"' && row[c + 1] === '"') { current += '"'; c++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { fields.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+    }
+    fields.push(current.trim());
+    if (fields.length < 2 || !fields[0]) continue;
+    const codigo = fields[0];
+    const email = (fields[4] || '').replace(/,+$/, '').trim();
+    clients[codigo] = {
+      n: fields[1] || '',
+      d: fields[2] || '',
+      t: fields[3] || '',
+      e: email
+    };
+  }
+  return clients;
+}
+
+// Convierte el objeto abreviado {n,d,t,e} a formato display {nombre,domicilio,...}
+function expandClient(code, c) {
+  return { codigo: code, nombre: c.n || '', domicilio: c.d || '', telefonos: c.t || '', emails: c.e || '' };
+}
+
+function loadClientesFromCache() {
+  if (clientesCache) return clientesCache;
+  const raw = localStorage.getItem('clientes_cache');
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      // Soporte: si viene como array viejo ({codigo,nombre,...}), convertir a nuevo formato
+      if (Array.isArray(parsed)) {
+        clientesCache = {};
+        parsed.forEach(c => {
+          if (c.codigo) {
+            clientesCache[c.codigo] = { n: c.nombre || '', d: c.domicilio || '', t: c.telefonos || '', e: c.emails || '' };
+          }
+        });
+        localStorage.setItem('clientes_cache', JSON.stringify(clientesCache));
+      } else {
+        clientesCache = parsed;
+      }
+    } catch { clientesCache = {}; }
+  } else {
+    clientesCache = {};
+  }
+  return clientesCache;
+}
+
+function saveClientesToCache(clientsMap) {
+  clientesCache = clientsMap;
+  localStorage.setItem('clientes_cache', JSON.stringify(clientsMap));
+}
+
+// Lookup instantáneo en cache local (sin Firestore)
+function lookupClient(codigo) {
+  if (!codigo || codigo.length < 3) return null;
+  const cache = loadClientesFromCache();
+  const c = cache[codigo];
+  if (!c) return null;
+  return expandClient(codigo, c);
+}
+
+// Precarga: 1 solo getDoc de Firestore → cache en localStorage
+async function preloadClientesCache() {
+  if (isMockMode || !navigator.onLine || !db) return;
+  const existing = localStorage.getItem('clientes_cache');
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      const count = Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length;
+      if (count > 50) return; // ya tenemos datos suficientes
+    } catch { /* continue to load */ }
+  }
+  try {
+    const docSnap = await getDoc(doc(db, 'clientes', 'directorio'));
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // Soporte: leer como string (nuevo) o como objeto (formato viejo)
+      let clientsMap = {};
+      if (data.json && typeof data.json === 'string') {
+        clientsMap = JSON.parse(data.json);
+      } else if (data.data && typeof data.data === 'object') {
+        clientsMap = data.data;
+      }
+      saveClientesToCache(clientsMap);
+      console.log(`[Clientes] Cache precargado: ${Object.keys(clientsMap).length} clientes desde Firestore`);
+    }
+  } catch (e) {
+    console.warn('[Clientes] Error precargando cache:', e);
+  }
+}
+
+// Upload: 1 solo setDoc — almacena como STRING para evitar el límite de index entries de Firestore
+async function uploadClientsToFirestore(clientsMap) {
+  const jsonString = JSON.stringify(clientsMap);
+  const sizeKB = Math.round(new Blob([jsonString]).size / 1024);
+  if (sizeKB > 950) {
+    throw new Error(`El JSON pesa ${sizeKB} KB. Firestore tiene un límite de 1024 KB por documento. Considerá dividir el archivo.`);
+  }
+  // Almacenar como string plano (1 campo indexado) en vez de objeto anidado (20K+ campos)
+  await setDoc(doc(db, 'clientes', 'directorio'), {
+    json: jsonString,
+    count: Object.keys(clientsMap).length,
+    lastUpdated: new Date().toISOString()
+  });
+  saveClientesToCache(clientsMap);
+  return { count: Object.keys(clientsMap).length, sizeKB };
+}
+
+function renderAdminClients() {
+  const container = document.getElementById('admin-clients-body');
+  if (!container) return;
+
+  const cache = loadClientesFromCache();
+  if (Object.keys(cache).length > 0) {
+    renderClientsTable(cache);
+  } else if (!isMockMode && navigator.onLine && db) {
+    container.innerHTML = '<tr><td colspan="4" class="text-center" style="padding:2rem;">Cargando clientes de Firestore...</td></tr>';
+    preloadClientesCache().then(() => {
+      renderClientsTable(loadClientesFromCache());
+    }).catch(e => {
+      console.warn('[Clientes] Error cargando de Firestore:', e);
+      renderClientsTable(loadClientesFromCache());
+    });
+  } else {
+    renderClientsTable(cache);
+  }
+}
+
+function renderClientsTable(cache) {
+  const container = document.getElementById('admin-clients-body');
+  if (!container) return;
+  const codes = Object.keys(cache).sort();
+  if (codes.length === 0) {
+    container.innerHTML = '<tr class="empty-row"><td colspan="4" class="text-center">No hay clientes cargados. Subí un CSV desde el panel.</td></tr>';
+    const countEl = document.getElementById('admin-clients-count');
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  container.innerHTML = '';
+  codes.forEach(codigo => {
+    const c = cache[codigo];
+    const tr = document.createElement('tr');
+    const nombre = c.n || c.nombre || '';
+    const domicilio = c.d || c.domicilio || '';
+    const contacto = c.e || c.emails || c.t || c.telefonos || '--';
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(codigo)}</strong></td>
+      <td>${escapeHtml(nombre)}</td>
+      <td>${escapeHtml(domicilio)}</td>
+      <td>${escapeHtml(contacto)}</td>
+    `;
+    container.appendChild(tr);
+  });
+  const countEl = document.getElementById('admin-clients-count');
+  if (countEl) countEl.textContent = `${codes.length} cliente${codes.length !== 1 ? 's' : ''}`;
+}
+
 // --- MODAL: CREAR / EDITAR TÉCNICO ---
 function openTechModal(techData = null) {
   const modal = document.getElementById('modal-tech');
@@ -2041,9 +2359,6 @@ function showConfirmModal(title, message, onConfirm) {
 }
 
 // --- CARGAR TODOS LOS COMPROBANTES (VISTA ADMIN) ---
-let allAdminComprobantes = [];
-let allTechNames = {};
-
 async function loadAllComprobantes() {
   const tbody = document.getElementById('admin-comps-body');
   const techFilter = document.getElementById('admin-filter-tech');

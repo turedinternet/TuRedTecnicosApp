@@ -2014,6 +2014,7 @@ tr:last-child td { border-bottom: none; }
   }
   #admin-techs-table tbody td::before,
   #admin-comps-table tbody td::before,
+  #admin-clients-table tbody td::before,
   #caja-table tbody td::before {
     content: attr(data-label);
     font-weight: 500;
@@ -2023,4 +2024,33 @@ tr:last-child td { border-bottom: none; }
   .modal-content {
     max-height: 85vh;
   }
+}
+
+/* --- CSV Upload Zone --- */
+.csv-upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: rgba(255,255,255,0.02);
+}
+.csv-upload-zone:hover,
+.csv-upload-zone.drag-over {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+.csv-upload-zone p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* --- Client Lookup Visual Feedback --- */
+#client-id {
+  transition: border-color 0.3s ease;
+}
+#client-id:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
