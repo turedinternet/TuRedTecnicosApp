@@ -91,6 +91,14 @@ function initNetworkMonitoring() {
   window.addEventListener('online', updateStatus);
   window.addEventListener('offline', updateStatus);
   updateStatus(); // Estado inicial
+
+  // Sync al cargar la app: capturar comprobantes pendientes de sesiones anteriores
+  // y también los que quedaron "sincronizados" localmente sin llegar a Firestore
+  setTimeout(() => {
+    if (navigator.onLine && !isMockMode) {
+      syncOfflineComprobantes();
+    }
+  }, 2000);
 }
 
 function initFirebaseOrMock() {
@@ -1076,6 +1084,7 @@ async function generateComprobante() {
       pendiente: Math.max(0, total - cobroEfectivo - cobroTransferencia),
       vuelto: Math.max(0, cobroEfectivo + cobroTransferencia - total)
     },
+    // Online → sincronizado (se envía a Firestore abajo). Offline → pendiente, sync lo enviará al reconectar
     estado: navigator.onLine ? 'sincronizado' : 'pendiente_sincronizacion',
     fecha_sincronizacion: navigator.onLine ? new Date().toISOString() : null,
     intentos_sincronizacion: 0,
@@ -1096,12 +1105,19 @@ async function generateComprobante() {
     savedReceipts.push(comprobante);
     localStorage.setItem('mock_comprobantes', JSON.stringify(savedReceipts));
     console.log('Comprobante mock guardado localmente:', comprobante);
-  } else {
-    // Firebase real: enviar a Firestore (fire-and-forget, no bloquear la UI)
+  } else if (navigator.onLine) {
+    // Firebase real + online: enviar a Firestore (estado ya es 'sincronizado')
     setDoc(doc(db, 'comprobantes', uuid), comprobante)
       .then(() => console.log('Comprobante enviado a Firestore:', uuid))
-      .catch(e => console.error('Error al guardar comprobante en Firestore:', e));
+      .catch(e => {
+        console.error('Error al guardar comprobante en Firestore:', e);
+        // Revertir estado a pendiente para que sync lo reintente
+        comprobante.estado = 'pendiente_sincronizacion';
+        comprobante.fecha_sincronizacion = null;
+        localStorage.setItem(`receipt_cache_${uuid}`, JSON.stringify(comprobante));
+      });
   }
+  // Si offline: queda como pendiente_sincronizacion, sync lo enviará al reconectar
 
   // Limpiar Carrito y Formulario del Panel
   resetPanelForm();
@@ -1358,40 +1374,41 @@ async function syncOfflineComprobantes() {
       const keys = Object.keys(localStorage);
       const pendingKeys = keys.filter(k => k.startsWith('receipt_cache_'));
       let syncedCount = 0;
+      let failedCount = 0;
+      const syncedIds = [];
 
       for (const key of pendingKeys) {
         try {
           const data = JSON.parse(localStorage.getItem(key));
           if (data && data.estado === 'pendiente_sincronizacion') {
-            // Actualizar estado ANTES de enviar a Firestore
+            // Marcar como sincronizado ANTES de enviar — para que Firestore reciba el estado correcto
             data.estado = 'sincronizado';
             data.fecha_sincronizacion = new Date().toISOString();
             await setDoc(doc(db, 'comprobantes', data.comprobante_id), data);
             localStorage.setItem(key, JSON.stringify(data));
+            syncedIds.push(data.comprobante_id);
             syncedCount++;
           }
         } catch (err) {
+          failedCount++;
           console.error(`[Sync] Error enviando comprobante ${key}:`, err);
+          // NO marcamos como sincronizado — queda pendiente para el próximo intento
         }
       }
 
       if (syncedCount > 0) {
         console.log(`[Sync] ${syncedCount} comprobantes enviados a Firestore.`);
       }
-
-      // 2. Refrescar desde Firestore para obtener cualquier dato actualizado del servidor
-      if (currentUser) {
-        const q = query(collection(db, 'comprobantes'), where('tecnico_uid', '==', currentUser.uid));
-        const querySnapshot = await getDocs(q);
-        querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          localStorage.setItem(`receipt_cache_${data.comprobante_id}`, JSON.stringify(data));
-        });
+      if (failedCount > 0) {
+        console.warn(`[Sync] ${failedCount} comprobantes fallaron — quedarán pendientes para el próximo intento.`);
+      }
+      if (syncedCount === 0 && failedCount === 0) {
+        console.log('[Sync] No hay comprobantes pendientes para sincronizar.');
       }
 
       console.log('[Sync] Sincronización completada.');
 
-      // 3. Si estamos en la vista de comprobante actual, recargar para reflejar estado
+      // 2. Si estamos en la vista de comprobante actual, recargar para reflejar estado
       const hash = window.location.hash;
       if (hash.startsWith('#/comprobante/')) {
         const parts = hash.split('/');
