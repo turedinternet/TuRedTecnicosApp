@@ -332,6 +332,7 @@ function initRouter() {
 
     if (hash === '#/login') {
       showView('view-login');
+      resetLoginButton();
       checkLoginState(true); // Redirige al panel si ya está logueado
     } else if (hash === '#/panel') {
       checkLoginState(false, () => {
@@ -773,16 +774,25 @@ async function handleLogout() {
   if (isMockMode) {
     localStorage.removeItem('mock_session');
     currentUser = null;
+    resetLoginButton();
     window.location.hash = '#/login';
     return;
   }
 
   try {
+    resetLoginButton();
     await signOut(auth);
     window.location.hash = '#/login';
   } catch (error) {
     console.error('Error al cerrar sesión:', error);
   }
+}
+
+function resetLoginButton() {
+  const spinner = document.getElementById('login-spinner');
+  const btnText = document.querySelector('#btn-login span');
+  if (spinner) spinner.classList.add('hidden');
+  if (btnText) btnText.classList.remove('hidden');
 }
 
 // Carga de Tarifario
@@ -1011,9 +1021,13 @@ function updateCobroValidation(subtotal) {
   }
   const cobrado = cobroEfectivo + cobroTransferencia;
   const pendiente = Math.max(0, subtotal - cobrado);
+  const vuelto = Math.max(0, cobrado - subtotal);
   if (cobrado === 0) {
     cobroValidation.textContent = 'No se ha registrado ningún cobro';
     cobroValidation.className = 'cobro-invalid';
+  } else if (vuelto > 0) {
+    cobroValidation.textContent = `Cobrado: ${formatCurrency(cobrado)} — A favor: ${formatCurrency(vuelto)}`;
+    cobroValidation.className = 'cobro-valid';
   } else if (pendiente === 0) {
     cobroValidation.textContent = `Total cobrado: ${formatCurrency(cobrado)} — Pago completo`;
     cobroValidation.className = 'cobro-valid';
@@ -1059,7 +1073,8 @@ async function generateComprobante() {
     metodo_cobro: {
       efectivo: cobroEfectivo,
       transferencia: cobroTransferencia,
-      pendiente: Math.max(0, total - cobroEfectivo - cobroTransferencia)
+      pendiente: Math.max(0, total - cobroEfectivo - cobroTransferencia),
+      vuelto: Math.max(0, cobroEfectivo + cobroTransferencia - total)
     },
     estado: navigator.onLine ? 'sincronizado' : 'pendiente_sincronizacion',
     fecha_sincronizacion: navigator.onLine ? new Date().toISOString() : null,
@@ -1186,9 +1201,11 @@ async function loadComprobanteView(id) {
       const ef = comprobante.metodo_cobro.efectivo || 0;
       const tr = comprobante.metodo_cobro.transferencia || 0;
       const pend = comprobante.metodo_cobro.pendiente != null ? comprobante.metodo_cobro.pendiente : Math.max(0, (comprobante.total || 0) - ef - tr);
+      const vuelto = comprobante.metodo_cobro.vuelto || 0;
       const parts = [];
       if (ef > 0) parts.push(`Efectivo ${formatCurrency(ef)}`);
       if (tr > 0) parts.push(`Transferencia ${formatCurrency(tr)}`);
+      if (vuelto > 0) parts.push(`A favor ${formatCurrency(vuelto)}`);
       if (pend > 0) parts.push(`Pendiente ${formatCurrency(pend)}`);
       if (parts.length > 0) {
         cobroBadge.textContent = `Cobro: ${parts.join(' / ')}`;
@@ -1495,8 +1512,11 @@ async function loadHistorialComprobantes() {
       const ef = c.metodo_cobro.efectivo || 0;
       const trans = c.metodo_cobro.transferencia || 0;
       const pend = c.metodo_cobro.pendiente != null ? c.metodo_cobro.pendiente : Math.max(0, (c.total || 0) - ef - trans);
+      const vuelto = c.metodo_cobro.vuelto || 0;
       if (pend > 0) {
-        cobroHtml = `<span class="badge-cobro badge-cobro-pendiente">${formatCurrency(ef + trans)} / ${formatCurrency(pend)} pda.</span>`;
+        cobroHtml = `<span class="badge-cobro badge-cobro-pendiente">${formatCurrency(ef + trans)} cobr. / ${formatCurrency(pend)} pda.</span>`;
+      } else if (vuelto > 0) {
+        cobroHtml = `<span class="badge-cobro badge-cobro-efectivo">${formatCurrency(ef + trans)} / ${formatCurrency(vuelto)} a fav.</span>`;
       } else if (ef > 0 && trans > 0) {
         cobroHtml = `<span class="badge-cobro badge-cobro-mixed">${formatCurrency(ef)} / ${formatCurrency(trans)}</span>`;
       } else if (trans > 0) {
