@@ -1761,25 +1761,14 @@ async function handleTechSubmit(e) {
       // --- CREACIÓN ---
       const savedAdminEmail = currentUser.email;
 
-      // Crear usuario en Firebase Auth (esto lo loguea como el nuevo usuario)
+      // Paso 1: Crear usuario en Firebase Auth (esto lo loguea como el nuevo usuario)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUid = userCredential.user.uid;
 
-      // Guardar datos del técnico en Firestore
-      await setDoc(doc(db, 'usuarios', newUid), {
-        nombre: name,
-        empresa: company,
-        email: email,
-        rol: 'tecnico',
-        activo: true,
-        fecha_registro: new Date().toISOString()
-      });
-
-      // Cerrar sesión del nuevo usuario
+      // Paso 2: Cerrar sesión del nuevo usuario
       await signOut(auth);
 
-      // Re-login del admin: pedir contraseña al admin antes de cerrar sesión
-      // Usamos una referencia temporal guardada antes del signOut
+      // Paso 3: Re-login del admin
       const adminPassword = prompt('Ingresá tu contraseña de admin para volver a iniciar sesión:');
       if (adminPassword) {
         try {
@@ -1793,6 +1782,16 @@ async function handleTechSubmit(e) {
         window.location.hash = '#/login';
         return;
       }
+
+      // Paso 4: Ahora como admin, crear el documento del técnico en Firestore
+      await setDoc(doc(db, 'usuarios', newUid), {
+        nombre: name,
+        empresa: company,
+        email: email,
+        rol: 'tecnico',
+        activo: true,
+        fecha_registro: new Date().toISOString()
+      });
 
       successEl.textContent = `Técnico "${name}" creado correctamente.`;
       successEl.classList.remove('hidden');
