@@ -1375,9 +1375,19 @@ tr:last-child td { border-bottom: none; }
     padding: 0.7rem 1.2rem;
   }
 
+  .panel-tabs-nav {
+    flex-wrap: wrap;
+    overflow-x: hidden;
+    gap: 0.35rem;
+  }
+
   .tab-btn {
-    font-size: 0.78rem;
-    padding: 0.55rem 0.7rem;
+    font-size: clamp(0.7rem, 3.2vw, 0.82rem);
+    padding: 0.55rem 0.4rem;
+    flex: 1 1 calc(50% - 0.35rem);
+    justify-content: center;
+    text-align: center;
+    min-height: 38px;
   }
 
   /* Tablas → tarjetas apiladas en celular */
@@ -1627,11 +1637,210 @@ tr:last-child td { border-bottom: none; }
 
 /* Smartwatch / pantallas tiny (< 300px) */
 @media (max-width: 300px) {
-  .tab-btn svg,
-  .btn svg {
+  #app-container {
+    padding: 0.35rem;
+  }
+
+  .glass-card {
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  /* Header: apilar vertical, ultra compacto */
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.5rem !important;
+  }
+
+  .user-profile {
+    gap: 0.3rem;
+  }
+
+  .user-profile h2 {
+    font-size: 0.85rem;
+    white-space: normal;
+  }
+
+  .company-tag {
     display: none;
   }
 
+  .app-header .btn {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
+    min-height: 28px;
+    width: 100%;
+  }
+
+  /* Tabs: solo iconos, 2x2 compacto */
+  .panel-tabs-nav {
+    padding: 0.2rem;
+    gap: 0.2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .tab-btn {
+    flex: 1 1 calc(50% - 0.2rem);
+    padding: 0.35rem 0.2rem;
+    font-size: 0;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .tab-btn svg {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+
+  .avatar {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    font-size: 0.7rem;
+  }
+
+  /* Cards de admin: contenido compacto */
+  .history-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .history-header h3 {
+    font-size: 0.85rem;
+  }
+
+  .history-header .btn {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
+    min-height: 28px;
+    width: 100%;
+  }
+
+  /* Búsqueda: sin min-width */
+  .admin-search-bar .search-input-wrapper {
+    min-width: 0;
+  }
+
+  .admin-search-bar .search-input {
+    font-size: 14px;
+    padding: 0.45rem 0.5rem 0.45rem 2rem;
+    min-height: 36px;
+  }
+
+  .admin-search-bar .search-input-wrapper svg {
+    left: 0.5rem;
+    width: 14px;
+    height: 14px;
+  }
+
+  .search-result-count {
+    font-size: 0.65rem;
+  }
+
+  /* Filtros: columna, sin min-width */
+  .admin-filters,
+  .caja-filters {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .admin-filters .custom-select,
+  .caja-filters .custom-select,
+  .caja-filters .cobro-input-group {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* Tablas admin: cards apiladas */
+  .table-container {
+    overflow-x: hidden;
+    background: transparent;
+    border: none;
+  }
+
+  table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  #admin-techs-table thead,
+  #admin-comps-table thead,
+  #admin-clients-table thead,
+  #caja-table thead {
+    display: none;
+  }
+
+  #admin-techs-table tbody tr,
+  #admin-comps-table tbody tr,
+  #admin-clients-table tbody tr,
+  #caja-table tbody tr {
+    display: block;
+    padding: 0.5rem;
+    margin-bottom: 0.4rem;
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  #admin-techs-table tbody td,
+  #admin-comps-table tbody td,
+  #admin-clients-table tbody td,
+  #caja-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.2rem 0;
+    border: none;
+    text-align: right;
+    font-size: 0.7rem;
+  }
+
+  #admin-techs-table tbody td::before,
+  #admin-comps-table tbody td::before,
+  #admin-clients-table tbody td::before,
+  #caja-table tbody td::before {
+    font-size: 0.65rem;
+  }
+
+  /* Rendición de caja: resumen en 2 columnas */
+  .caja-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+  }
+
+  .caja-card {
+    padding: 0.5rem;
+  }
+
+  .caja-card-value {
+    font-size: 0.85rem;
+  }
+
+  .caja-card-label {
+    font-size: 0.6rem;
+  }
+
+  /* Paginación compacta */
+  .pagination-controls {
+    gap: 0.15rem;
+    margin-top: 0.5rem;
+  }
+
+  .pagination-btn {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0.2rem 0.35rem;
+    font-size: 0.65rem;
+  }
+
+  /* Receipt */
   .receipt-number {
     font-size: 0.7rem;
   }
