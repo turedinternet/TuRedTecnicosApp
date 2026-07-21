@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   setupInstallModalEvents();
   initPWAInstallPrompt();
+  initServiceWorker();
 });
 
 // --- 1. CAPA DE CONEXIÓN Y RED (Fase L - Link) ---
@@ -104,6 +105,61 @@ function initNetworkMonitoring() {
     // Precargar cache de clientes en background (para lookup offline)
     preloadClientesCache();
   }, 2000);
+}
+
+// --- 1b. SERVICE WORKER Y ACTUALIZACIONES PWA ---
+function initServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+
+  const banner = document.getElementById('update-banner');
+  const btnUpdate = document.getElementById('btn-update-app');
+
+  function showUpdateBanner(registration) {
+    if (!banner || !btnUpdate) return;
+    banner.classList.remove('hidden');
+    btnUpdate.onclick = () => {
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    };
+  }
+
+  navigator.serviceWorker.register('./sw.js').then((registration) => {
+    console.log('[SW] Registrado con scope:', registration.scope);
+
+    // Verificar si ya hay un SW esperando activarse
+    if (registration.waiting) {
+      showUpdateBanner(registration);
+    }
+
+    // Detectar cuando se encuentra un nuevo SW
+    registration.addEventListener('updatefound', () => {
+      const newWorker = registration.installing;
+      if (!newWorker) return;
+
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed') {
+          if (navigator.serviceWorker.controller) {
+            // Hay un SW anterior: nueva versión lista para activar
+            showUpdateBanner(registration);
+          } else {
+            // Primera instalación: SW instalado sin versión previa
+            console.log('[SW] Primera instalación. La app está cacheada para uso offline.');
+          }
+        }
+      });
+    });
+  }).catch((err) => {
+    console.warn('[SW] Error al registrar:', err);
+  });
+
+  // Cuando el nuevo SW toma control, recargar la página
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
 }
 
 function initFirebaseOrMock() {
