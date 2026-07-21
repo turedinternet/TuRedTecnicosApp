@@ -180,7 +180,8 @@ async function loadRendicionCaja() {
     if (saved) {
       comprobantes = JSON.parse(saved).map(c => ({
         ...c,
-        _techName: currentTechData.nombre || 'Técnico'
+        _techName: currentTechData.nombre || 'Técnico',
+        cliente_nombre_search: c.cliente?.nombre || ''
       }));
     }
   } else {
@@ -190,7 +191,8 @@ async function loadRendicionCaja() {
         const data = docSnap.data();
         comprobantes.push({
           ...data,
-          _techName: allTechNames[data.tecnico_uid] || data.tecnico_nombre || 'Desconocido'
+          _techName: allTechNames[data.tecnico_uid] || data.tecnico_nombre || 'Desconocido',
+          cliente_nombre_search: data.cliente?.nombre || ''
         });
       });
     } catch (e) {
@@ -285,54 +287,75 @@ function renderCajaSummary(comprobantes) {
 function renderCajaTable(comprobantes) {
   const tbody = document.getElementById('caja-body');
   if (!tbody) return;
+  const state = adminState.caja;
 
   comprobantes.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
 
-  if (comprobantes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center">No se encontraron comprobantes para el rango seleccionado.</td></tr>`;
-    return;
+  // Guardar data para paginación
+  state.fullData = comprobantes;
+
+  // Aplicar búsqueda
+  state.filteredData = filterByText(comprobantes, state.search, ['comprobante_id', '_techName', 'cliente_nombre_search']);
+  const paginated = paginateData(state.filteredData, state.page, state.perPage);
+
+  // Actualizar count
+  const countEl = document.getElementById('admin-caja-count');
+  if (countEl) {
+    countEl.textContent = state.search
+      ? `${paginated.totalItems} de ${comprobantes.length} comprobantes`
+      : `${comprobantes.length} comprobantes`;
   }
 
-  tbody.innerHTML = '';
-  comprobantes.forEach(c => {
-    const tr = document.createElement('tr');
-    const badgeHtml = c.estado === 'sincronizado'
-      ? '<span class="badge-sync badge-sync-online"><span class="badge-dot"></span>Sincronizado</span>'
-      : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
+  if (paginated.data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center">${state.search ? 'No se encontraron comprobantes con esa búsqueda.' : 'No se encontraron comprobantes para el rango seleccionado.'}</td></tr>`;
+  } else {
+    tbody.innerHTML = '';
+    paginated.data.forEach(c => {
+      const tr = document.createElement('tr');
+      const badgeHtml = c.estado === 'sincronizado'
+        ? '<span class="badge-sync badge-sync-online"><span class="badge-dot"></span>Sincronizado</span>'
+        : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
 
-    let cobroHtml = '<span class="badge-cobro badge-cobro-none">No reg.</span>';
-    let efectivoVal = 0;
-    let transferenciaVal = 0;
-    let pendienteVal = 0;
-    if (c.metodo_cobro) {
-      efectivoVal = c.metodo_cobro.efectivo || 0;
-      transferenciaVal = c.metodo_cobro.transferencia || 0;
-      pendienteVal = c.metodo_cobro.pendiente != null ? c.metodo_cobro.pendiente : Math.max(0, (c.total || 0) - efectivoVal - transferenciaVal);
-      if (pendienteVal > 0) {
-        cobroHtml = `<span class="badge-cobro badge-cobro-pendiente">Pendiente</span>`;
-      } else if (efectivoVal > 0 && transferenciaVal > 0) {
-        cobroHtml = `<span class="badge-cobro badge-cobro-mixed">Mixto</span>`;
-      } else if (transferenciaVal > 0) {
-        cobroHtml = `<span class="badge-cobro badge-cobro-transferencia">Transferencia</span>`;
+      let cobroHtml = '<span class="badge-cobro badge-cobro-none">No reg.</span>';
+      let efectivoVal = 0;
+      let transferenciaVal = 0;
+      let pendienteVal = 0;
+      if (c.metodo_cobro) {
+        efectivoVal = c.metodo_cobro.efectivo || 0;
+        transferenciaVal = c.metodo_cobro.transferencia || 0;
+        pendienteVal = c.metodo_cobro.pendiente != null ? c.metodo_cobro.pendiente : Math.max(0, (c.total || 0) - efectivoVal - transferenciaVal);
+        if (pendienteVal > 0) {
+          cobroHtml = `<span class="badge-cobro badge-cobro-pendiente">Pendiente</span>`;
+        } else if (efectivoVal > 0 && transferenciaVal > 0) {
+          cobroHtml = `<span class="badge-cobro badge-cobro-mixed">Mixto</span>`;
+        } else if (transferenciaVal > 0) {
+          cobroHtml = `<span class="badge-cobro badge-cobro-transferencia">Transferencia</span>`;
+        } else {
+          cobroHtml = `<span class="badge-cobro badge-cobro-efectivo">Efectivo</span>`;
+        }
       } else {
-        cobroHtml = `<span class="badge-cobro badge-cobro-efectivo">Efectivo</span>`;
+        efectivoVal = c.total || 0;
       }
-    } else {
-      efectivoVal = c.total || 0;
-    }
 
-    tr.innerHTML = `
-      <td data-label="Comprobante"><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
-      <td data-label="Técnico">${escapeHtml(c._techName)}</td>
-      <td data-label="Cliente">${escapeHtml(c.cliente?.nombre) || '--'}</td>
-      <td data-label="Fecha">${formatDate(c.fecha_creacion)}</td>
-      <td data-label="Efectivo" class="text-right" style="color: var(--accent-success); font-weight: 600">${formatCurrency(efectivoVal)}</td>
-      <td data-label="Transferencia" class="text-right" style="color: #3b82f6; font-weight: 600">${formatCurrency(transferenciaVal)}</td>
-      <td data-label="Pendiente" class="text-right" style="color: ${pendienteVal > 0 ? 'var(--accent-danger)' : 'var(--accent-secondary)'}; font-weight: 600">${formatCurrency(pendienteVal)}</td>
-      <td data-label="Total" class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
-      <td data-label="Cobro" class="text-center">${cobroHtml}</td>
-    `;
-    tbody.appendChild(tr);
+      tr.innerHTML = `
+        <td data-label="Comprobante"><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
+        <td data-label="Técnico">${escapeHtml(c._techName)}</td>
+        <td data-label="Cliente">${escapeHtml(c.cliente?.nombre) || '--'}</td>
+        <td data-label="Fecha">${formatDate(c.fecha_creacion)}</td>
+        <td data-label="Efectivo" class="text-right" style="color: var(--accent-success); font-weight: 600">${formatCurrency(efectivoVal)}</td>
+        <td data-label="Transferencia" class="text-right" style="color: #3b82f6; font-weight: 600">${formatCurrency(transferenciaVal)}</td>
+        <td data-label="Pendiente" class="text-right" style="color: ${pendienteVal > 0 ? 'var(--accent-danger)' : 'var(--accent-secondary)'}; font-weight: 600">${formatCurrency(pendienteVal)}</td>
+        <td data-label="Total" class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
+        <td data-label="Cobro" class="text-center">${cobroHtml}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Paginación
+  renderPaginationControls('admin-caja-pagination', paginated, (newPage) => {
+    state.page = newPage;
+    renderCajaTable(state.fullData);
   });
 }
 
@@ -591,7 +614,7 @@ function setupEventListeners() {
   
   const validateForm = () => {
     const subtotal = cartItems.reduce((acc, curr) => acc + curr.subtotal, 0);
-    const cobroValid = subtotal === 0 || (cobroEfectivo + cobroTransferencia <= subtotal);
+    const cobroValid = subtotal === 0 || (cobroEfectivo + cobroTransferencia >= 0);
     btnGenerateReceipt.disabled = !(clientName.value.trim() && clientAddress.value.trim() && cartItems.length > 0 && cobroValid);
   };
   
@@ -651,18 +674,21 @@ function setupEventListeners() {
     tabAdminTechs.addEventListener('click', () => {
       switchAdminTab(tabAdminTechs);
       document.getElementById('admin-techs-container').classList.remove('hidden');
+      adminState.techs.page = 1;
     });
   }
   if (tabAdminComps) {
     tabAdminComps.addEventListener('click', () => {
       switchAdminTab(tabAdminComps);
       document.getElementById('admin-comps-container').classList.remove('hidden');
+      adminState.comps.page = 1;
     });
   }
   if (tabAdminCaja) {
     tabAdminCaja.addEventListener('click', () => {
       switchAdminTab(tabAdminCaja);
       document.getElementById('admin-caja-container').classList.remove('hidden');
+      adminState.caja.page = 1;
       loadRendicionCaja();
     });
   }
@@ -670,6 +696,7 @@ function setupEventListeners() {
     tabAdminClients.addEventListener('click', () => {
       switchAdminTab(tabAdminClients);
       document.getElementById('admin-clients-container').classList.remove('hidden');
+      adminState.clients.page = 1;
       renderAdminClients();
     });
   }
@@ -714,19 +741,59 @@ function setupEventListeners() {
   const adminFilterTech = document.getElementById('admin-filter-tech');
   const adminFilterStatus = document.getElementById('admin-filter-status');
   const btnRefreshAdminComps = document.getElementById('btn-refresh-admin-comps');
-  if (adminFilterTech) adminFilterTech.addEventListener('change', loadAllComprobantes);
-  if (adminFilterStatus) adminFilterStatus.addEventListener('change', loadAllComprobantes);
-  if (btnRefreshAdminComps) btnRefreshAdminComps.addEventListener('click', loadAllComprobantes);
+  if (adminFilterTech) adminFilterTech.addEventListener('change', () => { adminState.comps.page = 1; loadAllComprobantes(); });
+  if (adminFilterStatus) adminFilterStatus.addEventListener('change', () => { adminState.comps.page = 1; loadAllComprobantes(); });
+  if (btnRefreshAdminComps) btnRefreshAdminComps.addEventListener('click', () => { adminState.comps.page = 1; loadAllComprobantes(); });
 
   // --- ADMIN: Filtros de Rendición de Caja ---
   const cajaFilterFrom = document.getElementById('caja-filter-from');
   const cajaFilterTo = document.getElementById('caja-filter-to');
   const cajaFilterTech = document.getElementById('caja-filter-tech');
   const btnRefreshCaja = document.getElementById('btn-refresh-caja');
-  if (cajaFilterFrom) cajaFilterFrom.addEventListener('change', loadRendicionCaja);
-  if (cajaFilterTo) cajaFilterTo.addEventListener('change', loadRendicionCaja);
-  if (cajaFilterTech) cajaFilterTech.addEventListener('change', loadRendicionCaja);
-  if (btnRefreshCaja) btnRefreshCaja.addEventListener('click', loadRendicionCaja);
+  if (cajaFilterFrom) cajaFilterFrom.addEventListener('change', () => { adminState.caja.page = 1; loadRendicionCaja(); });
+  if (cajaFilterTo) cajaFilterTo.addEventListener('change', () => { adminState.caja.page = 1; loadRendicionCaja(); });
+  if (cajaFilterTech) cajaFilterTech.addEventListener('change', () => { adminState.caja.page = 1; loadRendicionCaja(); });
+  if (btnRefreshCaja) btnRefreshCaja.addEventListener('click', () => { adminState.caja.page = 1; loadRendicionCaja(); });
+
+  // --- ADMIN: Búsqueda en Técnicos ---
+  const techsSearch = document.getElementById('admin-techs-search');
+  if (techsSearch) {
+    techsSearch.addEventListener('input', debounce(() => {
+      adminState.techs.search = techsSearch.value;
+      adminState.techs.page = 1;
+      renderAdminTechsPage();
+    }, 300));
+  }
+
+  // --- ADMIN: Búsqueda en Comprobantes ---
+  const compsSearch = document.getElementById('admin-comps-search');
+  if (compsSearch) {
+    compsSearch.addEventListener('input', debounce(() => {
+      adminState.comps.search = compsSearch.value;
+      adminState.comps.page = 1;
+      renderAdminComprobantes();
+    }, 300));
+  }
+
+  // --- ADMIN: Búsqueda en Caja ---
+  const cajaSearch = document.getElementById('admin-caja-search');
+  if (cajaSearch) {
+    cajaSearch.addEventListener('input', debounce(() => {
+      adminState.caja.search = cajaSearch.value;
+      adminState.caja.page = 1;
+      renderCajaTable(adminState.caja.fullData);
+    }, 300));
+  }
+
+  // --- ADMIN: Búsqueda en Clientes ---
+  const clientsSearch = document.getElementById('admin-clients-search');
+  if (clientsSearch) {
+    clientsSearch.addEventListener('input', debounce(() => {
+      adminState.clients.search = clientsSearch.value;
+      adminState.clients.page = 1;
+      renderClientsTable(loadClientesFromCache());
+    }, 300));
+  }
 
   // --- CLIENTES: Lookup por N° Cliente (debounced) ---
   const clientIdInput = document.getElementById('client-id');
@@ -1841,6 +1908,91 @@ function debounce(fn, delay = 400) {
   };
 }
 
+// --- PAGINACIÓN Y BÚSQUEDA: ESTADO Y UTILIDADES ---
+const adminState = {
+  techs:   { page: 1, search: '', perPage: 10, fullData: [], filteredData: [] },
+  comps:   { page: 1, search: '', perPage: 10, fullData: [], filteredData: [] },
+  caja:    { page: 1, search: '', perPage: 10, fullData: [], filteredData: [] },
+  clients: { page: 1, search: '', perPage: 10, fullData: [], filteredData: [] },
+};
+
+function filterByText(array, text, fields) {
+  if (!text || !text.trim()) return array;
+  const terms = text.toLowerCase().trim().split(/\s+/);
+  return array.filter(item => {
+    return terms.every(term => {
+      return fields.some(f => {
+        const val = item[f];
+        return val && String(val).toLowerCase().includes(term);
+      });
+    });
+  });
+}
+
+function paginateData(array, page, perPage) {
+  const totalItems = array.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.max(1, Math.min(page, totalPages));
+  const start = (safePage - 1) * perPage;
+  const data = array.slice(start, start + perPage);
+  return { data, totalPages, currentPage: safePage, totalItems };
+}
+
+function renderPaginationControls(containerId, state, onPageChange) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  if (state.totalPages <= 1) return;
+
+  const { currentPage, totalPages } = state;
+
+  const makeBtn = (text, page, disabled = false, active = false) => {
+    const btn = document.createElement('button');
+    btn.className = 'pagination-btn';
+    if (active) btn.classList.add('active');
+    if (disabled) btn.disabled = true;
+    btn.textContent = text;
+    btn.addEventListener('click', () => { if (!disabled && !active) onPageChange(page); });
+    return btn;
+  };
+
+  const addEllipsis = () => {
+    const span = document.createElement('span');
+    span.className = 'pagination-ellipsis';
+    span.textContent = '...';
+    container.appendChild(span);
+  };
+
+  // Previous button
+  container.appendChild(makeBtn('‹', currentPage - 1, currentPage === 1));
+
+  // Page numbers with smart ellipsis
+  const pages = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (currentPage > 3) addEllipsis();
+    const rangeStart = Math.max(2, currentPage - 1);
+    const rangeEnd = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = rangeStart; i <= rangeEnd; i++) pages.push(i);
+    if (currentPage < totalPages - 2) addEllipsis();
+    pages.push(totalPages);
+  }
+
+  // Remove duplicates from pages array
+  const seen = new Set();
+  pages.forEach(p => {
+    if (!seen.has(p)) {
+      seen.add(p);
+      container.appendChild(makeBtn(String(p), p, false, p === currentPage));
+    }
+  });
+
+  // Next button
+  container.appendChild(makeBtn('›', currentPage + 1, currentPage === totalPages));
+}
+
 // Parsea CSV → objeto JSON claveado por código con campos abreviados
 // Entrada: CSV con columnas Código,Nombre,Domicilio,Teléfonos,Emails
 // Salida: { "010460": { n: "nombre", d: "domicilio", t: "telefonos", e: "emails" }, ... }
@@ -1994,30 +2146,67 @@ function renderAdminClients() {
 function renderClientsTable(cache) {
   const container = document.getElementById('admin-clients-body');
   if (!container) return;
+  const state = adminState.clients;
+
   const codes = Object.keys(cache).sort();
+
+  // Guardar data completa en adminState
+  state.fullData = codes.map(codigo => {
+    const c = cache[codigo];
+    return {
+      codigo,
+      nombre: c.n || c.nombre || '',
+      domicilio: c.d || c.domicilio || '',
+      contacto: c.e || c.emails || c.t || c.telefonos || '',
+      _searchText: `${codigo} ${c.n || c.nombre || ''} ${c.d || c.domicilio || ''} ${c.e || c.emails || ''} ${c.t || c.telefonos || ''}`
+    };
+  });
+
+  // Actualizar total count
+  const totalCountEl = document.getElementById('admin-clients-total-count');
+  if (totalCountEl) totalCountEl.textContent = `${codes.length} total`;
+
   if (codes.length === 0) {
     container.innerHTML = '<tr class="empty-row"><td colspan="4" class="text-center">No hay clientes cargados. Subí un CSV desde el panel.</td></tr>';
     const countEl = document.getElementById('admin-clients-count');
     if (countEl) countEl.textContent = '';
+    renderPaginationControls('admin-clients-pagination', { currentPage: 1, totalPages: 0, totalItems: 0 }, () => {});
     return;
   }
-  container.innerHTML = '';
-  codes.forEach(codigo => {
-    const c = cache[codigo];
-    const tr = document.createElement('tr');
-    const nombre = c.n || c.nombre || '';
-    const domicilio = c.d || c.domicilio || '';
-    const contacto = c.e || c.emails || c.t || c.telefonos || '--';
-    tr.innerHTML = `
-      <td><strong>${escapeHtml(codigo)}</strong></td>
-      <td>${escapeHtml(nombre)}</td>
-      <td>${escapeHtml(domicilio)}</td>
-      <td>${escapeHtml(contacto)}</td>
-    `;
-    container.appendChild(tr);
-  });
+
+  // Aplicar búsqueda
+  state.filteredData = filterByText(state.fullData, state.search, ['codigo', 'nombre', 'domicilio', 'contacto']);
+  const paginated = paginateData(state.filteredData, state.page, state.perPage);
+
+  // Actualizar count
   const countEl = document.getElementById('admin-clients-count');
-  if (countEl) countEl.textContent = `${codes.length} cliente${codes.length !== 1 ? 's' : ''}`;
+  if (countEl) {
+    countEl.textContent = state.search
+      ? `${paginated.totalItems} de ${codes.length} clientes`
+      : `${codes.length} clientes`;
+  }
+
+  container.innerHTML = '';
+  if (paginated.data.length === 0) {
+    container.innerHTML = `<tr class="empty-row"><td colspan="4" class="text-center">${state.search ? 'No se encontraron clientes con esa búsqueda.' : 'No hay clientes cargados. Subí un CSV desde el panel.'}</td></tr>`;
+  } else {
+    paginated.data.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td data-label="Código"><strong>${escapeHtml(c.codigo)}</strong></td>
+        <td data-label="Nombre">${escapeHtml(c.nombre)}</td>
+        <td data-label="Domicilio">${escapeHtml(c.domicilio)}</td>
+        <td data-label="Contacto">${escapeHtml(c.contacto || '--')}</td>
+      `;
+      container.appendChild(tr);
+    });
+  }
+
+  // Paginación
+  renderPaginationControls('admin-clients-pagination', paginated, (newPage) => {
+    state.page = newPage;
+    renderClientsTable(cache);
+  });
 }
 
 // --- MODAL: CREAR / EDITAR TÉCNICO ---
@@ -2184,22 +2373,53 @@ async function loadAdminTechs() {
       });
     } catch (e) { /* ignore if offline */ }
 
-    tbody.innerHTML = '';
-    techs.forEach(tech => {
-      const tr = document.createElement('tr');
-      const isCurrentUser = currentUser && tech.uid === currentUser.uid;
-      const rolBadge = tech.rol === 'admin'
+    // Guardar datos completos en adminState y anexar compCounts + badge info
+    adminState.techs.fullData = techs.map(tech => ({
+      ...tech,
+      _compCount: compCounts[tech.uid] || 0,
+      _isCurrentUser: currentUser && tech.uid === currentUser.uid,
+      _rolBadge: tech.rol === 'admin'
         ? '<span class="badge-admin">Admin</span>'
-        : '<span class="badge-tech">Técnico</span>';
-      const count = compCounts[tech.uid] || 0;
+        : '<span class="badge-tech">Técnico</span>',
+    }));
 
+    renderAdminTechsPage();
+  } catch (error) {
+    console.error('Error cargando técnicos:', error);
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color: var(--accent-danger)">Error al cargar técnicos. Verifique su conexión.</td></tr>`;
+  }
+}
+
+function renderAdminTechsPage() {
+  const tbody = document.getElementById('admin-techs-body');
+  const state = adminState.techs;
+
+  // Aplicar búsqueda
+  state.filteredData = filterByText(state.fullData, state.search, ['nombre', 'email', 'empresa']);
+  const paginated = paginateData(state.filteredData, state.page, state.perPage);
+
+  // Actualizar count
+  const countEl = document.getElementById('admin-techs-count');
+  if (countEl) {
+    countEl.textContent = state.search
+      ? `${paginated.totalItems} de ${state.fullData.length} técnicos`
+      : `${state.fullData.length} técnicos`;
+  }
+
+  // Renderizar filas
+  tbody.innerHTML = '';
+  if (paginated.data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center">${state.search ? 'No se encontraron técnicos con esa búsqueda.' : 'No hay técnicos registrados.'}</td></tr>`;
+  } else {
+    paginated.data.forEach(tech => {
+      const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${escapeHtml(tech.nombre) || 'Sin nombre'}</strong>${isCurrentUser ? ' <small style="color:var(--accent-primary)">(Tú)</small>' : ''}</td>
-        <td>${escapeHtml(tech.email) || '--'}</td>
-        <td>${escapeHtml(tech.empresa) || 'TuRed'}</td>
-        <td>${rolBadge}</td>
-        <td class="text-center">${count}</td>
-        <td class="text-center">
+        <td data-label="Nombre"><strong>${escapeHtml(tech.nombre) || 'Sin nombre'}</strong>${tech._isCurrentUser ? ' <small style="color:var(--accent-primary)">(Tú)</small>' : ''}</td>
+        <td data-label="Email">${escapeHtml(tech.email) || '--'}</td>
+        <td data-label="Empresa">${escapeHtml(tech.empresa) || 'TuRed'}</td>
+        <td data-label="Rol">${tech._rolBadge}</td>
+        <td data-label="Comprobantes" class="text-center">${tech._compCount}</td>
+        <td data-label="Acciones" class="text-center">
           <div class="history-actions">
             <button class="btn-icon-action btn-edit-tech" data-uid="${escapeHtml(tech.uid)}" data-nombre="${escapeHtml(tech.nombre || '')}" data-empresa="${escapeHtml(tech.empresa || '')}" data-email="${escapeHtml(tech.email || '')}" title="Editar">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -2207,7 +2427,7 @@ async function loadAdminTechs() {
             <button class="btn-icon-action btn-change-password" data-uid="${escapeHtml(tech.uid)}" data-email="${escapeHtml(tech.email || '')}" title="Cambiar Contraseña">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </button>
-            ${!isCurrentUser && tech.rol !== 'admin' ? `
+            ${!tech._isCurrentUser && tech.rol !== 'admin' ? `
             <button class="btn-icon-action btn-delete-tech" data-uid="${escapeHtml(tech.uid)}" data-nombre="${escapeHtml(tech.nombre || '')}" title="Eliminar">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>` : ''}
@@ -2216,37 +2436,39 @@ async function loadAdminTechs() {
       `;
       tbody.appendChild(tr);
     });
-
-    // Event listeners
-    tbody.querySelectorAll('.btn-edit-tech').forEach(btn => {
-      btn.addEventListener('click', () => {
-        openTechModal({
-          uid: btn.dataset.uid,
-          nombre: btn.dataset.nombre,
-          empresa: btn.dataset.empresa,
-          email: btn.dataset.email
-        });
-      });
-    });
-
-    tbody.querySelectorAll('.btn-change-password').forEach(btn => {
-      btn.addEventListener('click', () => openPasswordModal(btn.dataset.uid, btn.dataset.email));
-    });
-
-    tbody.querySelectorAll('.btn-delete-tech').forEach(btn => {
-      btn.addEventListener('click', () => {
-        showConfirmModal(
-          `Eliminar al técnico "${btn.dataset.nombre}"`,
-          `Se eliminará la cuenta de ${btn.dataset.nombre} y todos sus datos. Esta acción no se puede deshacer.`,
-          () => deleteTech(btn.dataset.uid, btn.dataset.nombre)
-        );
-      });
-    });
-
-  } catch (error) {
-    console.error('Error cargando técnicos:', error);
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color: var(--accent-danger)">Error al cargar técnicos. Verifique su conexión.</td></tr>`;
   }
+
+  // Event listeners
+  tbody.querySelectorAll('.btn-edit-tech').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openTechModal({
+        uid: btn.dataset.uid,
+        nombre: btn.dataset.nombre,
+        empresa: btn.dataset.empresa,
+        email: btn.dataset.email
+      });
+    });
+  });
+
+  tbody.querySelectorAll('.btn-change-password').forEach(btn => {
+    btn.addEventListener('click', () => openPasswordModal(btn.dataset.uid, btn.dataset.email));
+  });
+
+  tbody.querySelectorAll('.btn-delete-tech').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showConfirmModal(
+        `Eliminar al técnico "${btn.dataset.nombre}"`,
+        `Se eliminará la cuenta de ${btn.dataset.nombre} y todos sus datos. Esta acción no se puede deshacer.`,
+        () => deleteTech(btn.dataset.uid, btn.dataset.nombre)
+      );
+    });
+  });
+
+  // Paginación
+  renderPaginationControls('admin-techs-pagination', paginated, (newPage) => {
+    state.page = newPage;
+    renderAdminTechsPage();
+  });
 }
 
 // --- ELIMINAR TÉCNICO ---
@@ -2385,7 +2607,8 @@ async function loadAllComprobantes() {
       const data = docSnap.data();
       allAdminComprobantes.push({
         ...data,
-        _techName: techNames[data.tecnico_uid] || data.tecnico_nombre || 'Desconocido'
+        _techName: techNames[data.tecnico_uid] || data.tecnico_nombre || 'Desconocido',
+        cliente_nombre_search: data.cliente?.nombre || ''
       });
     });
 
@@ -2412,9 +2635,11 @@ function renderAdminComprobantes() {
   const tbody = document.getElementById('admin-comps-body');
   const techFilter = document.getElementById('admin-filter-tech');
   const statusFilter = document.getElementById('admin-filter-status');
+  const state = adminState.comps;
 
   let filtered = [...allAdminComprobantes];
 
+  // Aplicar filtros de dropdown
   if (techFilter && techFilter.value) {
     filtered = filtered.filter(c => c.tecnico_uid === techFilter.value);
   }
@@ -2422,41 +2647,55 @@ function renderAdminComprobantes() {
     filtered = filtered.filter(c => c.estado === statusFilter.value);
   }
 
+  // Aplicar búsqueda de texto
+  filtered = filterByText(filtered, state.search, ['comprobante_id', '_techName', 'cliente_nombre_search']);
+
   filtered.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center">No se encontraron comprobantes con los filtros seleccionados.</td></tr>`;
-    return;
+  // Guardar data filtrada para paginación
+  state.filteredData = filtered;
+  const paginated = paginateData(filtered, state.page, state.perPage);
+
+  // Actualizar count
+  const countEl = document.getElementById('admin-comps-count');
+  if (countEl) {
+    countEl.textContent = state.search
+      ? `${paginated.totalItems} de ${allAdminComprobantes.length} comprobantes`
+      : `${filtered.length} comprobantes`;
   }
 
-  tbody.innerHTML = '';
-  filtered.forEach(c => {
-    const tr = document.createElement('tr');
-    const badgeHtml = c.estado === 'sincronizado'
-      ? '<span class="badge-sync badge-sync-online"><span class="badge-dot"></span>Sincronizado</span>'
-      : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
+  if (paginated.data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center">${state.search || (techFilter && techFilter.value) || (statusFilter && statusFilter.value) ? 'No se encontraron comprobantes con esos filtros.' : 'No hay comprobantes registrados.'}</td></tr>`;
+  } else {
+    tbody.innerHTML = '';
+    paginated.data.forEach(c => {
+      const tr = document.createElement('tr');
+      const badgeHtml = c.estado === 'sincronizado'
+        ? '<span class="badge-sync badge-sync-online"><span class="badge-dot"></span>Sincronizado</span>'
+        : '<span class="badge-sync badge-sync-offline"><span class="badge-dot"></span>Pendiente</span>';
 
-    tr.innerHTML = `
-      <td><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
-      <td>${escapeHtml(c._techName)}</td>
-      <td>${escapeHtml(c.cliente?.nombre) || '--'}</td>
-      <td>${formatDate(c.fecha_creacion)}</td>
-      <td class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
-      <td class="text-center">${badgeHtml}</td>
-      <td class="text-center">
-        <div class="history-actions">
-          <a href="#/comprobante/${escapeHtml(c.comprobante_id)}" class="btn-view-receipt">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-            Ver
-          </a>
-          <button class="btn-delete-receipt btn-admin-delete-comp" data-id="${escapeHtml(c.comprobante_id)}" title="Eliminar">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
-        </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
+      tr.innerHTML = `
+        <td data-label="Comprobante"><strong>${escapeHtml(c.comprobante_id.toUpperCase())}</strong></td>
+        <td data-label="Técnico">${escapeHtml(c._techName)}</td>
+        <td data-label="Cliente">${escapeHtml(c.cliente?.nombre) || '--'}</td>
+        <td data-label="Fecha">${formatDate(c.fecha_creacion)}</td>
+        <td data-label="Total" class="text-right" style="font-weight: 600; color: var(--accent-secondary)">${formatCurrency(c.total)}</td>
+        <td data-label="Estado" class="text-center">${badgeHtml}</td>
+        <td data-label="Acciones" class="text-center">
+          <div class="history-actions">
+            <a href="#/comprobante/${escapeHtml(c.comprobante_id)}" class="btn-view-receipt">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              Ver
+            </a>
+            <button class="btn-delete-receipt btn-admin-delete-comp" data-id="${escapeHtml(c.comprobante_id)}" title="Eliminar">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
 
   // Event listeners para eliminar
   tbody.querySelectorAll('.btn-admin-delete-comp').forEach(btn => {
@@ -2478,5 +2717,11 @@ function renderAdminComprobantes() {
         }
       );
     });
+  });
+
+  // Paginación
+  renderPaginationControls('admin-comps-pagination', paginated, (newPage) => {
+    state.page = newPage;
+    renderAdminComprobantes();
   });
 }
