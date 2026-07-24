@@ -671,6 +671,14 @@
             <label for="tech-password">Contraseña *</label>
             <input type="password" id="tech-password" required placeholder="Mínimo 6 caracteres" minlength="6">
           </div>
+          <div class="form-group" id="tech-role-group">
+            <label for="tech-role">Rol *</label>
+            <select id="tech-role" required>
+              <option value="tecnico">Técnico</option>
+              <option value="operador">Operador</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
           <p id="modal-tech-error" class="error-text hidden" role="alert"></p>
           <p id="modal-tech-success" class="success-text hidden" role="status"></p>
           <div class="modal-actions">

@@ -1976,6 +1976,18 @@ tr:last-child td { border-bottom: none; }
   letter-spacing: 0.02em;
 }
 
+.badge-operador {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+  color: white;
+  letter-spacing: 0.02em;
+}
+
 .badge-tech {
   display: inline-flex;
   align-items: center;

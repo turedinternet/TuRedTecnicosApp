@@ -35,7 +35,11 @@ let auth = null;
 let currentUser = null;
 let currentTechData = { nombre: 'Técnico de Campo', empresa: 'TuRed', email: '' };
 let isMockMode = false;
-let isAdmin = false;
+let currentRole = 'tecnico'; // 'tecnico' | 'operador' | 'admin'
+function hasRole(role) { return currentRole === role; }
+function isAdmin() { return currentRole === 'admin'; }
+function isOperador() { return currentRole === 'operador'; }
+function isTecnico() { return currentRole === 'tecnico'; }
 let tarifario = [];
 let cartItems = [];
 let selectedPaymentMethod = 'contado'; // 'contado' o 'cuotas'
@@ -439,7 +443,7 @@ function initRouter() {
       loadComprobanteView(id);
     } else if (hash === '#/admin') {
       checkLoginState(false, () => {
-        if (!isAdmin) {
+        if (!isAdmin()) {
           window.location.hash = '#/panel';
           return;
         }
@@ -472,7 +476,9 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
     if (session) {
       currentUser = JSON.parse(session);
       currentTechData = { nombre: currentUser.nombre, empresa: currentUser.empresa, email: currentUser.email };
+      currentRole = currentUser.rol || 'tecnico';
       updateTechProfileUI();
+      updateRoleUI();
       if (isOnLoginRoute) {
         window.location.hash = '#/panel';
       } else if (onAuthSuccessCallback) {
@@ -490,7 +496,7 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       currentUser = user;
-      isAdmin = false;
+      currentRole = 'tecnico';
       
       // Intentar recuperar los datos del técnico desde la colección usuarios de Firestore
       try {
@@ -502,7 +508,7 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
             empresa: data.empresa || 'TuRed',
             email: user.email
           };
-          isAdmin = data.rol === 'admin';
+          currentRole = data.rol || 'tecnico';
         } else {
           currentTechData = { nombre: 'Técnico de Campo', empresa: 'TuRed', email: user.email };
         }
@@ -512,7 +518,7 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
       }
       
       updateTechProfileUI();
-      updateAdminButton();
+      updateRoleUI();
       if (isOnLoginRoute) {
         window.location.hash = '#/panel';
       } else if (onAuthSuccessCallback) {
@@ -520,8 +526,8 @@ function checkLoginState(isOnLoginRoute, onAuthSuccessCallback) {
       }
     } else {
       currentUser = null;
-      isAdmin = false;
-      updateAdminButton();
+      currentRole = 'tecnico';
+      updateRoleUI();
       if (!isOnLoginRoute) {
         window.location.hash = '#/login';
       }
@@ -538,10 +544,17 @@ function updateTechProfileUI() {
   document.querySelectorAll('.avatar').forEach(avatar => avatar.textContent = initials);
 }
 
-function updateAdminButton() {
+function updateRoleUI() {
+  // Botón Admin: visible solo si es admin
   const adminBtn = document.getElementById('btn-admin');
   if (adminBtn) {
-    adminBtn.classList.toggle('hidden', !isAdmin);
+    adminBtn.classList.toggle('hidden', !isAdmin());
+  }
+  // Actualizar badge/indicador de rol en el header si existe
+  const roleTag = document.getElementById('user-display-role');
+  if (roleTag) {
+    const labels = { tecnico: 'Técnico', operador: 'Operador', admin: 'Administrador' };
+    roleTag.textContent = labels[currentRole] || 'Técnico';
   }
 }
 
@@ -994,12 +1007,15 @@ async function handleLogin(e) {
           uid: 'mock_uid_123',
           email: email,
           nombre: email.split('@')[0].toUpperCase(),
-          empresa: 'TuRed MOCK'
+          empresa: 'TuRed MOCK',
+          rol: 'admin'
         };
         localStorage.setItem('mock_session', JSON.stringify(mockUser));
         currentUser = mockUser;
         currentTechData = { nombre: mockUser.nombre, empresa: mockUser.empresa, email: mockUser.email };
+        currentRole = mockUser.rol || 'admin';
         updateTechProfileUI();
+        updateRoleUI();
         window.location.hash = '#/panel';
       } else {
         errorText.textContent = 'Usuario o contraseña incorrectos (Mínimo 4 caracteres).';
@@ -1035,6 +1051,7 @@ async function handleLogout() {
   if (isMockMode) {
     localStorage.removeItem('mock_session');
     currentUser = null;
+    currentRole = 'tecnico';
     resetLoginButton();
     window.location.hash = '#/login';
     return;
@@ -2285,6 +2302,7 @@ function openTechModal(techData = null) {
     document.getElementById('tech-name').value = techData.nombre || '';
     document.getElementById('tech-company').value = techData.empresa || 'TuRed';
     document.getElementById('tech-email').value = techData.email || '';
+    document.getElementById('tech-role').value = techData.rol || 'tecnico';
     document.getElementById('modal-tech-submit-text').textContent = 'Guardar Cambios';
     passwordGroup.classList.add('hidden');
     document.getElementById('tech-password').removeAttribute('required');
@@ -2292,6 +2310,7 @@ function openTechModal(techData = null) {
     // Modo creación
     title.textContent = 'Crear Técnico';
     document.getElementById('tech-edit-uid').value = '';
+    document.getElementById('tech-role').value = 'tecnico';
     document.getElementById('modal-tech-submit-text').textContent = 'Crear Técnico';
     passwordGroup.classList.remove('hidden');
     document.getElementById('tech-password').setAttribute('required', '');
@@ -2307,6 +2326,7 @@ async function handleTechSubmit(e) {
   const company = document.getElementById('tech-company').value.trim() || 'TuRed';
   const email = document.getElementById('tech-email').value.trim();
   const password = document.getElementById('tech-password').value;
+  const rol = document.getElementById('tech-role').value || 'tecnico';
   const errorEl = document.getElementById('modal-tech-error');
   const successEl = document.getElementById('modal-tech-success');
   const spinner = document.getElementById('modal-tech-spinner');
@@ -2334,7 +2354,7 @@ async function handleTechSubmit(e) {
     if (editUid) {
       // --- EDICIÓN ---
       const userRef = doc(db, 'usuarios', editUid);
-      await setDoc(userRef, { nombre: name, empresa: company, email }, { merge: true });
+      await setDoc(userRef, { nombre: name, empresa: company, email, rol }, { merge: true });
       successEl.textContent = 'Técnico actualizado correctamente.';
       successEl.classList.remove('hidden');
     } else {
@@ -2368,7 +2388,7 @@ async function handleTechSubmit(e) {
         nombre: name,
         empresa: company,
         email: email,
-        rol: 'tecnico',
+        rol: rol,
         activo: true,
         fecha_registro: new Date().toISOString()
       });
@@ -2436,6 +2456,8 @@ async function loadAdminTechs() {
       _isCurrentUser: currentUser && tech.uid === currentUser.uid,
       _rolBadge: tech.rol === 'admin'
         ? '<span class="badge-admin">Admin</span>'
+        : tech.rol === 'operador'
+        ? '<span class="badge-operador">Operador</span>'
         : '<span class="badge-tech">Técnico</span>',
     }));
 
@@ -2477,7 +2499,7 @@ function renderAdminTechsPage() {
         <td data-label="Comprobantes" class="text-center">${tech._compCount}</td>
         <td data-label="Acciones" class="text-center">
           <div class="history-actions">
-            <button class="btn-icon-action btn-edit-tech" data-uid="${escapeHtml(tech.uid)}" data-nombre="${escapeHtml(tech.nombre || '')}" data-empresa="${escapeHtml(tech.empresa || '')}" data-email="${escapeHtml(tech.email || '')}" title="Editar">
+            <button class="btn-icon-action btn-edit-tech" data-uid="${escapeHtml(tech.uid)}" data-nombre="${escapeHtml(tech.nombre || '')}" data-empresa="${escapeHtml(tech.empresa || '')}" data-email="${escapeHtml(tech.email || '')}" data-rol="${escapeHtml(tech.rol || 'tecnico')}" title="Editar">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
             </button>
             <button class="btn-icon-action btn-change-password" data-uid="${escapeHtml(tech.uid)}" data-email="${escapeHtml(tech.email || '')}" title="Cambiar Contraseña">
@@ -2501,7 +2523,8 @@ function renderAdminTechsPage() {
         uid: btn.dataset.uid,
         nombre: btn.dataset.nombre,
         empresa: btn.dataset.empresa,
-        email: btn.dataset.email
+        email: btn.dataset.email,
+        rol: btn.dataset.rol || 'tecnico'
       });
     });
   });
