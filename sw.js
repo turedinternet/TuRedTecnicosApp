@@ -1,7 +1,8 @@
-const CACHE_NAME = 'tarifario-tured-v5';
+const CACHE_NAME = 'tarifario-tured-v6';
 const ASSETS = [
   './',
   './index.html',
+  './tarjeta-pago.html',
   './style.css',
   './app.js',
   './config.js',
@@ -14,7 +15,9 @@ const ASSETS = [
   './Logo TuRed completo.png',
   'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js',
-  'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js'
+  'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 
 // Instalar el Service Worker y precachear los assets

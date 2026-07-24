@@ -2503,3 +2503,290 @@ tr:last-child td { border-bottom: none; }
     font-size: 16px;
   }
 }
+
+/* ==========================================================================
+   DYNAMIC CARD - Tarjetas de Pago
+   ========================================================================== */
+
+/* --- Tab Button --- */
+#tab-btn-cards {
+  display: none;
+}
+#tab-btn-cards.visible {
+  display: inline-flex;
+}
+
+/* --- Card Container (operador view) --- */
+.dynamic-card-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+}
+
+.dynamic-card-search {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 480px;
+}
+
+.dynamic-card-search .form-group {
+  flex: 1;
+  min-width: 180px;
+}
+
+.dynamic-card-search .btn {
+  white-space: nowrap;
+  min-height: 44px;
+}
+
+.dynamic-card-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.dynamic-card-actions .btn {
+  min-width: 140px;
+}
+
+.dynamic-card-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+  word-break: break-all;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.dynamic-card-link:hover {
+  background: var(--bg-glass);
+}
+
+.dynamic-card-error {
+  color: var(--accent-danger);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* ========================================================================
+   Tarjeta de Pago - Escalable dinámico
+   Proporción 1.586:1 (tarjeta de crédito)
+   Card max: 480px → vw factor = desired_px * 0.1875
+   ======================================================================== */
+.payment-card {
+  width: min(480px, 90vw);
+  border-radius: min(22px, 4.6vw);
+  border: min(5px, 1.1vw) solid #5ba4d9;
+  background: #ffffff;
+  box-shadow:
+    0 8px 32px rgba(91, 164, 217, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* --- Panel Superior: Entidad + Alias --- */
+.payment-card-header {
+  padding: min(14px, 3.3vw) min(16px, 3.8vw);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.payment-card-bank {
+  display: flex;
+  flex-direction: column;
+  gap: min(3px, 0.7vw);
+  flex: 1;
+  min-width: 0;
+}
+
+.payment-card-bank-label {
+  font-size: min(10px, 1.9vw);
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.payment-card-bank-name {
+  font-size: min(16px, 3.2vw);
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1.15;
+}
+
+.payment-card-alias-label {
+  font-size: min(10px, 1.9vw);
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: min(4px, 1vw);
+  text-align: center;
+}
+
+.payment-card-alias-value {
+  font-size: min(28px, 5.8vw);
+  font-weight: 900;
+  color: #1a1a1a;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  word-break: break-all;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.payment-card-bank-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(2px, 0.5vw);
+  margin-left: min(10px, 2.3vw);
+  flex-shrink: 0;
+}
+
+.payment-card-bank-logo-icon {
+  width: min(50px, 10vw);
+  height: min(50px, 10vw);
+  border-radius: min(10px, 2.1vw);
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-weight: 700;
+  font-size: min(10px, 2vw);
+}
+
+.payment-card-bank-logo-name {
+  font-size: min(7px, 1.4vw);
+  color: #94a3b8;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* --- Franja Azul --- */
+.payment-card-code-strip {
+  background: linear-gradient(135deg, #4a9fd4 0%, #5ba4d9 50%, #6db3e3 100%);
+  padding: min(7px, 1.6vw) min(16px, 3.8vw);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.payment-card-code-strip-label {
+  font-size: min(12px, 2.3vw);
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+/* --- Panel Código --- */
+.payment-card-code {
+  padding: min(10px, 2.3vw) min(16px, 3.8vw);
+  text-align: center;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-card-code-value {
+  font-size: min(26px, 5.2vw);
+  font-weight: 800;
+  color: #1a1a1a;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  word-break: break-all;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* --- Panel Logos --- */
+.payment-card-logos {
+  padding: min(8px, 1.9vw) min(12px, 2.8vw);
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: min(4px, 1vw);
+  flex-shrink: 0;
+}
+
+.payment-card-logos-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: min(5px, 1.2vw);
+  flex-wrap: wrap;
+}
+
+.payment-card-logo-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: min(3px, 0.7vw) min(6px, 1.3vw);
+  border-radius: min(4px, 0.9vw);
+  font-size: min(9px, 1.8vw);
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+/* Colores originales */
+.logo-pago-facil { background: #f9d71c; color: #1a1a1a; }
+.logo-provincia-net { background: #0066cc; color: #ffffff; }
+.logo-rapipago { background: #e31837; color: #ffffff; }
+.logo-todo-pago { background: #6c3ea1; color: #ffffff; }
+.logo-modo { background: #00b140; color: #ffffff; }
+.logo-link { background: #003087; color: #ffffff; }
+.logo-pagomiscuentas { background: #0091d5; color: #ffffff; }
+.logo-uala { background: #ff5a5f; color: #ffffff; }
+.logo-mercadopago { background: #009ee3; color: #ffffff; }
+
+/* --- Banda Inferior --- */
+.payment-card-web {
+  background: linear-gradient(135deg, #4a9fd4 0%, #5ba4d9 50%, #6db3e3 100%);
+  padding: min(7px, 1.6vw) min(16px, 3.8vw);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.payment-card-web-text {
+  font-size: min(10px, 1.9vw);
+  font-weight: 500;
+  color: #ffffff;
+  letter-spacing: 0.08em;
+}
+
+/* --- Responsive --- */
+@media (max-width: 520px) {
+  .payment-card {
+    border-radius: 18px;
+    border-width: 4px;
+  }
+  .dynamic-card-search {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dynamic-card-search .form-group {
+    min-width: 100%;
+  }
+}

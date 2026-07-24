@@ -550,6 +550,11 @@ function updateRoleUI() {
   if (adminBtn) {
     adminBtn.classList.toggle('hidden', !isAdmin());
   }
+  // Pestaña Tarjetas: visible si es operador o admin
+  const cardsTab = document.getElementById('tab-btn-cards');
+  if (cardsTab) {
+    cardsTab.classList.toggle('visible', isOperador() || isAdmin());
+  }
   // Actualizar badge/indicador de rol en el header si existe
   const roleTag = document.getElementById('user-display-role');
   if (roleTag) {
@@ -575,8 +580,36 @@ function setupEventListeners() {
     tabBtnService.addEventListener('click', () => switchTab('service'));
     tabBtnHistory.addEventListener('click', () => switchTab('history'));
   }
+  const tabBtnCards = document.getElementById('tab-btn-cards');
+  if (tabBtnCards) {
+    tabBtnCards.addEventListener('click', () => switchTab('cards'));
+  }
   if (btnRefreshHistory) {
     btnRefreshHistory.addEventListener('click', loadHistorialComprobantes);
+  }
+
+  // Dynamic Card - Search Client
+  const btnSearchCard = document.getElementById('btn-search-client-card');
+  if (btnSearchCard) {
+    btnSearchCard.addEventListener('click', searchClientForCard);
+  }
+  const cardClientCode = document.getElementById('card-client-code');
+  if (cardClientCode) {
+    cardClientCode.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') searchClientForCard();
+    });
+  }
+  const btnDownloadPng = document.getElementById('btn-download-png');
+  if (btnDownloadPng) {
+    btnDownloadPng.addEventListener('click', exportCardAsPNG);
+  }
+  const btnDownloadPdf = document.getElementById('btn-download-pdf');
+  if (btnDownloadPdf) {
+    btnDownloadPdf.addEventListener('click', exportCardAsPDF);
+  }
+  const btnCopyLink = document.getElementById('btn-copy-link');
+  if (btnCopyLink) {
+    btnCopyLink.addEventListener('click', copyPublicCardLink);
   }
 
   // Logout Button
@@ -1695,24 +1728,29 @@ async function syncOfflineComprobantes() {
 function switchTab(tabName) {
   const tabBtnService = document.getElementById('tab-btn-service');
   const tabBtnHistory = document.getElementById('tab-btn-history');
+  const tabBtnCards = document.getElementById('tab-btn-cards');
   const containerService = document.getElementById('panel-service-container');
   const containerHistory = document.getElementById('panel-history-container');
+  const containerCards = document.getElementById('panel-cards-container');
 
   if (!tabBtnService || !tabBtnHistory || !containerService || !containerHistory) return;
 
+  const allTabs = [tabBtnService, tabBtnHistory, tabBtnCards].filter(Boolean);
+  const allContainers = [containerService, containerHistory, containerCards].filter(Boolean);
+
+  allTabs.forEach(t => t.classList.remove('active'));
+  allContainers.forEach(c => c.classList.add('hidden'));
+
   if (tabName === 'service') {
     tabBtnService.classList.add('active');
-    tabBtnHistory.classList.remove('active');
     containerService.classList.remove('hidden');
-    containerHistory.classList.add('hidden');
   } else if (tabName === 'history') {
     tabBtnHistory.classList.add('active');
-    tabBtnService.classList.remove('active');
     containerHistory.classList.remove('hidden');
-    containerService.classList.add('hidden');
-    
-    // Cargar historial al abrir la pestaña
     loadHistorialComprobantes();
+  } else if (tabName === 'cards' && tabBtnCards && containerCards) {
+    tabBtnCards.classList.add('active');
+    containerCards.classList.remove('hidden');
   }
 }
 
@@ -2418,6 +2456,155 @@ async function handleTechSubmit(e) {
     spinner.classList.add('hidden');
     btnText.classList.remove('hidden');
   }
+}
+
+// --- DYNAMIC CARD: TARJETAS DE PAGO ---
+let currentCardData = null;
+
+function searchClientForCard() {
+  const codeInput = document.getElementById('card-client-code');
+  const errorEl = document.getElementById('card-error-msg');
+  const previewWrapper = document.getElementById('card-preview-wrapper');
+  const code = codeInput.value.trim().replace(/\D/g, '').padStart(6, '0');
+
+  errorEl.classList.add('hidden');
+  previewWrapper.classList.add('hidden');
+  currentCardData = null;
+
+  if (!code || code.length < 1) {
+    errorEl.textContent = 'Ingresá un número de cliente válido.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  if (isMockMode) {
+    loadCardFromFirestore(code);
+    return;
+  }
+
+  loadCardFromFirestore(code);
+}
+
+async function loadCardFromFirestore(code) {
+  const errorEl = document.getElementById('card-error-msg');
+  const previewWrapper = document.getElementById('card-preview-wrapper');
+
+  try {
+    // Primero intentar desde cache local (ya cargado por preloadClientesCache)
+    const cached = lookupClient(code);
+    if (cached) {
+      currentCardData = cached;
+      renderPaymentCard(currentCardData);
+      previewWrapper.classList.remove('hidden');
+      return;
+    }
+
+    // Si no está en cache, leer el documento directorio de Firestore
+    const docSnap = await getDoc(doc(db, 'clientes', 'directorio'));
+    if (!docSnap.exists()) {
+      errorEl.textContent = `No se encontró el directorio de clientes en Firestore.`;
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const data = docSnap.data();
+    let clientsMap = {};
+    if (data.json && typeof data.json === 'string') {
+      clientsMap = JSON.parse(data.json);
+    } else if (data.data && typeof data.data === 'object') {
+      clientsMap = data.data;
+    }
+
+    // Guardar en cache para futuras búsquedas
+    saveClientesToCache(clientsMap);
+
+    const clientEntry = clientsMap[code];
+    if (!clientEntry) {
+      errorEl.textContent = `No se encontró el cliente con código "${code}".`;
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    currentCardData = expandClient(code, clientEntry);
+    renderPaymentCard(currentCardData);
+    previewWrapper.classList.remove('hidden');
+  } catch (e) {
+    console.warn('Error loading client for card:', e);
+    errorEl.textContent = 'Error al buscar el cliente. Verificá tu conexión.';
+    errorEl.classList.remove('hidden');
+  }
+}
+
+function renderPaymentCard(clientData) {
+  const alias = `TURED.${clientData.codigo}`;
+  const code = `000${clientData.codigo}5120187735`;
+
+  document.getElementById('card-alias-full').textContent = alias;
+  document.getElementById('card-code-display').textContent = code;
+  document.getElementById('card-client-name').textContent = clientData.nombre;
+  document.getElementById('card-client-address').textContent = clientData.domicilio;
+  document.getElementById('card-client-phone').textContent = clientData.telefonos;
+}
+
+async function exportCardAsPNG() {
+  if (!currentCardData) return;
+
+  const cardEl = document.getElementById('payment-card');
+  const canvas = await html2canvas(cardEl, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: null,
+    borderRadius: '16px'
+  });
+
+  const link = document.createElement('a');
+  link.download = `TarjetaPago_${currentCardData.codigo}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+async function exportCardAsPDF() {
+  if (!currentCardData) return;
+
+  const cardEl = document.getElementById('payment-card');
+  const canvas = await html2canvas(cardEl, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: null,
+    borderRadius: '16px'
+  });
+
+  const imgData = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: [85.6, 53.98]
+  });
+
+  pdf.addImage(imgData, 'PNG', 0, 0, 85.6, 53.98);
+  pdf.save(`TarjetaPago_${currentCardData.codigo}.pdf`);
+}
+
+function copyPublicCardLink() {
+  if (!currentCardData) return;
+
+  const baseUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '');
+  const link = `${baseUrl}tarjeta-pago.html?cliente=${currentCardData.codigo}`;
+
+  navigator.clipboard.writeText(link).then(() => {
+    const linkDisplay = document.getElementById('card-link-display');
+    linkDisplay.textContent = link;
+    linkDisplay.classList.remove('hidden');
+
+    setTimeout(() => {
+      linkDisplay.classList.add('hidden');
+    }, 5000);
+  }).catch(() => {
+    const linkDisplay = document.getElementById('card-link-display');
+    linkDisplay.textContent = link;
+    linkDisplay.classList.remove('hidden');
+  });
 }
 
 // --- CARGAR LISTA DE TÉCNICOS ---

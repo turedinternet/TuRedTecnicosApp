@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#5ba4d9">
+  <meta name="description" content="TuRed - Tarjeta de Pago">
+  <title>TuRed - Tarjeta de Pago</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0a1628 0%, #0d2137 40%, #0f2b4a 100%);
+      color: #f3f4f6;
+      padding: 1.5rem;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header h1 {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: #94a3b8;
+      letter-spacing: 0.05em;
+    }
+
+    /* --- Tarjeta de Pago --- */
+    .payment-card {
+      width: min(480px, 90vw);
+      border-radius: min(22px, 4.6vw);
+      border: min(5px, 1.1vw) solid #5ba4d9;
+      background: #ffffff;
+      box-shadow:
+        0 8px 32px rgba(91, 164, 217, 0.2),
+        0 2px 8px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    /* --- Panel Superior --- */
+    .payment-card-header {
+      padding: min(14px, 3.3vw) min(16px, 3.8vw);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .payment-card-bank {
+      display: flex;
+      flex-direction: column;
+      gap: min(3px, 0.7vw);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .payment-card-bank-label {
+      font-size: min(10px, 1.9vw);
+      font-weight: 500;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .payment-card-bank-name {
+      font-size: min(16px, 3.2vw);
+      font-weight: 700;
+      color: #1a1a1a;
+      line-height: 1.15;
+    }
+
+    .payment-card-alias-label {
+      font-size: min(10px, 1.9vw);
+      font-weight: 500;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-top: min(4px, 1vw);
+      text-align: center;
+    }
+
+    .payment-card-alias-value {
+      font-size: min(28px, 5.8vw);
+      font-weight: 900;
+      color: #1a1a1a;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+      word-break: break-all;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .payment-card-bank-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: min(2px, 0.5vw);
+      margin-left: min(10px, 2.3vw);
+      flex-shrink: 0;
+    }
+
+    .payment-card-bank-logo-icon {
+      width: min(50px, 10vw);
+      height: min(50px, 10vw);
+      border-radius: min(10px, 2.1vw);
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-weight: 700;
+      font-size: min(10px, 2vw);
+    }
+
+    .payment-card-bank-logo-name {
+      font-size: min(7px, 1.4vw);
+      color: #94a3b8;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    /* --- Franja Azul --- */
+    .payment-card-code-strip {
+      background: linear-gradient(135deg, #4a9fd4 0%, #5ba4d9 50%, #6db3e3 100%);
+      padding: min(7px, 1.6vw) min(16px, 3.8vw);
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .payment-card-code-strip-label {
+      font-size: min(12px, 2.3vw);
+      font-weight: 600;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .payment-card-code {
+      padding: min(10px, 2.3vw) min(16px, 3.8vw);
+      text-align: center;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .payment-card-code-value {
+      font-size: min(26px, 5.2vw);
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: 0.12em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      word-break: break-all;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .payment-card-logos {
+      padding: min(8px, 1.9vw) min(12px, 2.8vw);
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: min(4px, 1vw);
+      flex-shrink: 0;
+    }
+
+    .payment-card-logos-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: min(5px, 1.2vw);
+      flex-wrap: wrap;
+    }
+
+    .payment-card-logo-item {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: min(3px, 0.7vw) min(6px, 1.3vw);
+      border-radius: min(4px, 0.9vw);
+      font-size: min(9px, 1.8vw);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .payment-card-code-strip-label {
+      font-size: min(7px, 1.5vw);
+      font-weight: 600;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    /* --- Panel Código --- */
+    .payment-card-code {
+      padding: min(6px, 1.8vw) min(10px, 3.5vw);
+      text-align: center;
+      background: #ffffff;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .payment-card-code-value {
+      font-size: min(20px, 4.2vw);
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: 0.12em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      word-break: break-all;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    /* --- Panel Logos --- */
+    .payment-card-logos {
+      padding: min(4px, 1.2vw) min(8px, 2.5vw);
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: min(2px, 0.5vw);
+      flex-shrink: 0;
+    }
+
+    .payment-card-logos-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: min(3px, 0.7vw);
+      flex-wrap: wrap;
+    }
+
+    .payment-card-logo-item {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: min(1px, 0.3vw) min(3px, 0.7vw);
+      border-radius: min(3px, 0.6vw);
+      font-size: min(5px, 1.1vw);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* Colores originales */
+    .logo-pago-facil { background: #f9d71c; color: #1a1a1a; }
+    .logo-provincia-net { background: #0066cc; color: #ffffff; }
+    .logo-rapipago { background: #e31837; color: #ffffff; }
+    .logo-todo-pago { background: #6c3ea1; color: #ffffff; }
+    .logo-modo { background: #00b140; color: #ffffff; }
+    .logo-link { background: #003087; color: #ffffff; }
+    .logo-pagomiscuentas { background: #0091d5; color: #ffffff; }
+    .logo-uala { background: #ff5a5f; color: #ffffff; }
+    .logo-mercadopago { background: #009ee3; color: #ffffff; }
+
+    /* --- Banda Inferior --- */
+    .payment-card-web {
+      background: linear-gradient(135deg, #4a9fd4 0%, #5ba4d9 50%, #6db3e3 100%);
+      padding: min(7px, 1.6vw) min(16px, 3.8vw);
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .payment-card-web-text {
+      font-size: min(10px, 1.9vw);
+      font-weight: 500;
+      color: #ffffff;
+      letter-spacing: 0.08em;
+    }
+
+    /* --- Panel Superior --- */
+    .payment-card-header {
+      padding: clamp(0.8rem, 3vw, 1.4rem) clamp(1rem, 4vw, 1.6rem);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      background: #ffffff;
+    }
+
+    .payment-card-bank {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .payment-card-bank-label {
+      font-size: clamp(0.5rem, 1.3vw, 0.65rem);
+      font-weight: 500;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .payment-card-bank-name {
+      font-size: clamp(0.7rem, 2vw, 0.95rem);
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .payment-card-alias-label {
+      font-size: clamp(0.5rem, 1.3vw, 0.65rem);
+      font-weight: 500;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-top: 0.4rem;
+    }
+
+    .payment-card-alias-value {
+      font-size: clamp(1rem, 3vw, 1.5rem);
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      word-break: break-all;
+    }
+
+    .payment-card-bank-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+      margin-left: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .payment-card-bank-logo-icon {
+      width: clamp(36px, 10vw, 56px);
+      height: clamp(36px, 10vw, 56px);
+      border-radius: 10px;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-weight: 700;
+      font-size: clamp(0.55rem, 1.5vw, 0.75rem);
+    }
+
+    .payment-card-bank-logo-name {
+      font-size: clamp(0.4rem, 1vw, 0.5rem);
+      color: #94a3b8;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    /* --- Franja Azul --- */
+    .payment-card-code-strip {
+      background: linear-gradient(135deg, #4a9fd4 0%, #5ba4d9 50%, #6db3e3 100%);
+      padding: clamp(0.4rem, 1.5vw, 0.7rem) clamp(1rem, 4vw, 1.6rem);
+      text-align: center;
+    }
+
+    .payment-card-code-strip-label {
+      font-size: clamp(0.5rem, 1.4vw, 0.7rem);
+      font-weight: 600;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    /* --- Panel Código --- */
+    .payment-card-code {
+      padding: clamp(0.8rem, 3vw, 1.4rem) clamp(1rem, 4vw, 1.6rem);
+      text-align: center;
+      background: #ffffff;
+    }
+
+    .payment-card-code-value {
+      font-size: clamp(1.2rem, 4vw, 1.9rem);
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: 0.12em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+      word-break: break-all;
+    }
+
+    /* --- Panel Logos --- */
+    .payment-card-logos {
+      padding: clamp(0.5rem, 2vw, 0.9rem) clamp(0.8rem, 3vw, 1.4rem);
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.3rem, 1vw, 0.5rem);
+    }
+
+    .payment-card-logos-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(0.25rem, 1vw, 0.45rem);
+      flex-wrap: wrap;
+    }
+
+    .payment-card-logo-item {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.2em 0.5em;
+      border-radius: 4px;
+      font-size: clamp(0.4rem, 1.1vw, 0.55rem);
+      font-weight: 600;
+      white-space: nowrap;
+      letter-spacing: 0.01em;
+    }
+
+    .logo-pago-facil { background: #f9d71c; color: #1a1a1a; }
+    .logo-provincia-net { background: #0066cc; color: #ffffff; }
+    .logo-rapipago { background: #e31837; color: #ffffff; }
+    .logo-todo-pago { background: #6c3ea1; color: #ffffff; }
+    .logo-modo { background: #00b140; color: #ffffff; }
+    .logo-link { background: #003087; color: #ffffff; }
+    .logo-pagomiscuentas { background: #0091d5; color: #ffffff; }
+    .logo-uala { background: #ff5a5f; color: #ffffff; }
+    .logo-mercadopago { background: #009ee3; color: #ffffff; }
+
+    /* --- Banda Inferior --- */
+    .payment-card-web {
+      background: linear-gradient(135deg, #4a9fd4 0%, #5ba4d9 50%, #6db3e3 100%);
+      padding: clamp(0.4rem, 1.2vw, 0.6rem) clamp(1rem, 4vw, 1.6rem);
+      text-align: center;
+    }
+
+    .payment-card-web-text {
+      font-size: clamp(0.5rem, 1.3vw, 0.7rem);
+      font-weight: 500;
+      color: #ffffff;
+      letter-spacing: 0.08em;
+    }
+
+    /* --- Client Info --- */
+    .client-info {
+      margin-top: 1.25rem;
+      width: 480px;
+      max-width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+
+    .client-info h3 {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.6rem;
+    }
+
+    .client-info p {
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      margin-bottom: 0.3rem;
+    }
+
+    .client-info strong { color: #f3f4f6; }
+
+    /* --- Loading / Error --- */
+    .loading-state, .error-state {
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .loading-state .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(255,255,255,0.15);
+      border-top-color: #5ba4d9;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-state h2 {
+      font-size: 1.1rem;
+      color: #ef4444;
+      margin-bottom: 0.5rem;
+    }
+
+    .error-state p {
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+
+    .hidden { display: none !important; }
+
+    /* --- Footer --- */
+    .page-footer {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>TuRed - Información de Pago</h1>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading-state" class="loading-state">
+    <div class="spinner"></div>
+    <p style="color: #94a3b8;">Cargando datos del cliente...</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error-state" class="error-state hidden">
+    <h2>No se encontró el cliente</h2>
+    <p>Verificá el número de cliente e intentá nuevamente.</p>
+  </div>
+
+  <!-- Card + Info -->
+  <div id="card-section" class="hidden">
+    <div id="payment-card" class="payment-card">
+      <!-- Panel Superior: Entidad + Alias -->
+      <div class="payment-card-header">
+        <div class="payment-card-bank">
+          <span class="payment-card-bank-label">Entidad de Pago:</span>
+          <span class="payment-card-bank-name">Banco Roela Siro</span>
+          <span class="payment-card-alias-label">Alias Transferencias</span>
+          <span class="payment-card-alias-value" id="card-alias-full">TURED.000000</span>
+        </div>
+        <div class="payment-card-bank-logo">
+          <div class="payment-card-bank-logo-icon">BRS</div>
+          <span class="payment-card-bank-logo-name">(FEP S.R.L.)</span>
+        </div>
+      </div>
+
+      <!-- Franja Azul: Código de Pago Electrónico -->
+      <div class="payment-card-code-strip">
+        <span class="payment-card-code-strip-label">Código de Pago Electrónico</span>
+      </div>
+
+      <!-- Panel Código -->
+      <div class="payment-card-code">
+        <span class="payment-card-code-value" id="card-code">00000000000000000000</span>
+      </div>
+
+      <!-- Panel Logos de Medios de Pago -->
+      <div class="payment-card-logos">
+        <div class="payment-card-logos-row">
+          <span class="payment-card-logo-item logo-pago-facil">Pago Fácil</span>
+          <span class="payment-card-logo-item logo-provincia-net">P. NET</span>
+          <span class="payment-card-logo-item logo-rapipago">Rapipago</span>
+          <span class="payment-card-logo-item logo-todo-pago">Todo Pago</span>
+          <span class="payment-card-logo-item logo-modo">MODO</span>
+        </div>
+        <div class="payment-card-logos-row">
+          <span class="payment-card-logo-item logo-link">Link</span>
+          <span class="payment-card-logo-item logo-pagomiscuentas">PagoMisCuentas</span>
+          <span class="payment-card-logo-item logo-uala">Ualá</span>
+          <span class="payment-card-logo-item logo-mercadopago">Mercado Pago</span>
+        </div>
+      </div>
+
+      <!-- Banda Inferior: Web -->
+      <div class="payment-card-web">
+        <span class="payment-card-web-text">www.tured.com.ar</span>
+      </div>
+    </div>
+
+    <div class="client-info">
+      <h3>Datos del Cliente</h3>
+      <p><strong>Nombre:</strong> <span id="client-name">--</span></p>
+      <p><strong>Dirección:</strong> <span id="client-address">--</span></p>
+      <p><strong>Teléfono:</strong> <span id="client-phone">--</span></p>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <p>FEP S.R.L. - TuRed Servicios de Conectividad</p>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js';
+    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDM0OG9sI6MaFQ1gYUpFBIW0LYITffJ3Sg",
+      authDomain: "turedapp.firebaseapp.com",
+      projectId: "turedapp",
+      storageBucket: "turedapp.firebasestorage.app",
+      messagingSenderId: "248898418494",
+      appId: "1:248898418494:web:bcb0c774e1819226c15e6f",
+      measurementId: "G-CR6ZPCS5E3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const loadingEl = document.getElementById('loading-state');
+    const errorEl = document.getElementById('error-state');
+    const cardSection = document.getElementById('card-section');
+
+    function showError() {
+      loadingEl.classList.add('hidden');
+      errorEl.classList.remove('hidden');
+    }
+
+    function showCard() {
+      loadingEl.classList.add('hidden');
+      cardSection.classList.remove('hidden');
+    }
+
+    async function loadClient() {
+      const params = new URLSearchParams(window.location.search);
+      const clienteCode = params.get('cliente');
+
+      if (!clienteCode || clienteCode.length < 1) {
+        showError();
+        return;
+      }
+
+      const code = clienteCode.trim().replace(/\D/g, '').padStart(6, '0');
+
+      try {
+        const docSnap = await getDoc(doc(db, 'clientes', 'directorio'));
+
+        if (!docSnap.exists()) {
+          showError();
+          return;
+        }
+
+        const data = docSnap.data();
+        let clientsMap = {};
+        if (data.json && typeof data.json === 'string') {
+          clientsMap = JSON.parse(data.json);
+        } else if (data.data && typeof data.data === 'object') {
+          clientsMap = data.data;
+        }
+
+        const clientEntry = clientsMap[code];
+        if (!clientEntry) {
+          showError();
+          return;
+        }
+
+        const alias = `TURED.${code}`;
+        const paymentCode = `000${code}5120187735`;
+
+        document.getElementById('card-alias-full').textContent = alias;
+        document.getElementById('card-code').textContent = paymentCode;
+        document.getElementById('client-name').textContent = clientEntry.n || '--';
+        document.getElementById('client-address').textContent = clientEntry.d || '--';
+        document.getElementById('client-phone').textContent = clientEntry.t || '--';
+
+        showCard();
+      } catch (e) {
+        console.error('Error loading client:', e);
+        showError();
+      }
+    }
+
+    loadClient();
+  </script>
+</body>
+</html>
